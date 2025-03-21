@@ -2,7 +2,7 @@ image: python:3.11-slim
 
 default:
   tags:
-    - gs-docker-performance-test
+    - gs-runners-hq
 stages:
   - test
 
