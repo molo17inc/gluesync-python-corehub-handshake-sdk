@@ -5,7 +5,12 @@
 Example usage of the Gluesync Python SDK.
 
 This script demonstrates how to use the Gluesync SDK to establish a connection to the CoreHub,
-perform the handshake, and handle events.
+perform the handshake, handle events, and implement connection resilience.
+
+Key features demonstrated:
+1. UDP Autodiscovery - Finding CoreHub on the network automatically
+2. Connection Event Handling - Managing connection, disconnection, and error events
+3. Reconnection Strategy - Handling connection failures with automatic retries
 """
 
 import asyncio
@@ -30,8 +35,9 @@ logging.basicConfig(
 logger = logging.getLogger("Gluesync-example")
 
 # Configuration
-# Set HOST to None to use UDP autodiscovery
-# Or set HOST to an IP address to bypass autodiscovery
+# Set HOST to None to use UDP autodiscovery - the SDK will automatically
+# discover CoreHub on the network using UDP broadcast messages
+# Or set a specific IP address to bypass autodiscovery
 # HOST = "127.0.0.1"  # Fixed CoreHub hostname or IP
 HOST = os.environ.get("CORE_HUB_ADDRESS", None)  # Use env var or autodiscovery
 PORT = 1717  # CoreHub port
@@ -41,8 +47,16 @@ USE_SSL = False  # Whether to use SSL
 KEYSTORE_PATH = None  # Path to JKS keystore file (if USE_SSL is True)
 KEYSTORE_PASSWORD = None  # Password for JKS keystore (if USE_SSL is True)
 
+# Reconnection settings
+MAX_RECONNECT_ATTEMPTS = 5  # Number of reconnection attempts (0 for infinite)
+RECONNECT_DELAY = 2.0  # Delay between reconnection attempts in seconds
+
 # Global client instance
 client = None
+
+# Reconnection state
+reconnecting = False
+reconnect_attempt = 0
 
 
 async def on_connected(token):
@@ -58,12 +72,19 @@ async def on_connected(token):
 
 async def on_disconnected(reason):
     """
-    Handle the disconnected event.
+    Handle the disconnected event and trigger reconnection.
     
     Args:
         reason: The reason for disconnection
     """
+    global reconnecting
+    
     logger.info(f"Disconnected from CoreHub: {reason}")
+    
+    # Start reconnection if not already reconnecting
+    if not reconnecting:
+        reconnecting = True
+        asyncio.create_task(attempt_reconnect())
 
 
 async def on_error(error):
@@ -97,6 +118,46 @@ async def shutdown(signal, loop):
     loop.stop()
 
 
+async def attempt_reconnect():
+    """
+    Attempt to reconnect to CoreHub with exponential backoff.
+    """
+    global client, reconnecting, reconnect_attempt
+    
+    reconnect_attempt = 0
+    
+    while reconnecting and (MAX_RECONNECT_ATTEMPTS == 0 or reconnect_attempt < MAX_RECONNECT_ATTEMPTS):
+        reconnect_attempt += 1
+        
+        delay = min(RECONNECT_DELAY * (2 ** (reconnect_attempt - 1)), 30)  # Exponential backoff, max 30 seconds
+        
+        # Wait before attempting to reconnect
+        logger.info(f"Waiting {delay:.1f} seconds before reconnection attempt {reconnect_attempt}")
+        await asyncio.sleep(delay)
+        
+        if not reconnecting:
+            break
+        
+        try:
+            logger.info(f"Reconnection attempt {reconnect_attempt}" + 
+                       (f"/{MAX_RECONNECT_ATTEMPTS}" if MAX_RECONNECT_ATTEMPTS > 0 else ""))
+            
+            # Connect to CoreHub
+            if not client.is_connected:
+                await client.connect()
+                
+                logger.info(f"Successfully reconnected to CoreHub after {reconnect_attempt} attempts")
+                reconnecting = False
+                reconnect_attempt = 0
+                break
+                
+        except Exception as e:
+            logger.error(f"Reconnection attempt {reconnect_attempt} failed: {e}")
+    
+    if reconnecting and MAX_RECONNECT_ATTEMPTS > 0 and reconnect_attempt >= MAX_RECONNECT_ATTEMPTS:
+        logger.error(f"Failed to reconnect after {MAX_RECONNECT_ATTEMPTS} attempts")
+        reconnecting = False
+
 async def main():
     """
     Main entry point for the example.
@@ -117,6 +178,7 @@ async def main():
         
         if HOST is None:
             logger.info("Using UDP autodiscovery to find CoreHub...")
+            logger.info("The SDK will listen for UDP broadcast messages to discover CoreHub's address")
         else:
             logger.info(f"Using provided CoreHub address: {HOST}")
         
@@ -126,12 +188,21 @@ async def main():
         client.on_error = on_error
         
         # Connect to CoreHub
-        logger.info(f"Connecting to CoreHub at {HOST}:{PORT}...")
+        logger.info(f"Connecting to CoreHub...")
         await client.connect()
         
+        # If we're connected, the host may have been discovered via UDP
+        discovered_host = getattr(client, '_host', HOST)
+        logger.info(f"Connected to CoreHub at {discovered_host}:{PORT}")
+        
         # Keep the connection open until user interrupts
-        while client.is_connected:
-            await asyncio.sleep(1)
+        while True:
+            if client.is_connected:
+                logger.info("Connection status: Connected")
+            else:
+                logger.info("Connection status: Disconnected")
+            
+            await asyncio.sleep(5)
         
     except GluesyncLicenseError as e:
         logger.error(f"License error: {e}")
