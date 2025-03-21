@@ -220,6 +220,8 @@ class GluesyncClient:
                     start_port=self.discovery_start_port,
                     port_range=self.discovery_port_range
                 )
+                # Save the discovered host to the instance
+                self.host = host
                 logger.info(f"CoreHub discovered at {host}")
             except Exception as e:
                 logger.error(f"Failed to discover CoreHub: {e}")

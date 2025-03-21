@@ -28,7 +28,24 @@ import logging
 import ssl
 from typing import Optional, Callable, Dict, Any, Union
 import websockets
-from websockets.exceptions import ConnectionClosed
+
+# Handle different versions of websockets library
+try:
+    # For newer versions
+    from websockets.exceptions import ConnectionClosedOK, ConnectionClosedError
+    
+    # Create a compatible ConnectionClosed class
+    class ConnectionClosed(Exception):
+        def __init__(self, reason=""):
+            self.reason = reason
+            super().__init__(reason)
+            
+    # Map the new exceptions to our compatible class
+    websockets_connection_closed_exceptions = (ConnectionClosedOK, ConnectionClosedError)
+except ImportError:
+    # For older versions
+    from websockets.exceptions import ConnectionClosed
+    websockets_connection_closed_exceptions = (ConnectionClosed,)
 
 from .exceptions import (
     GluesyncConnectionError,
@@ -94,7 +111,20 @@ class WebSocketConnection:
         Returns:
             True if connected, False otherwise
         """
-        return self._connected and self.ws is not None and not self.ws.closed
+        # Different versions of websockets library use different attributes
+        # to check if the connection is closed
+        if self._connected and self.ws is not None:
+            try:
+                # Try the closed attribute first (older versions)
+                return not self.ws.closed
+            except AttributeError:
+                # For newer versions, check if the connection is open
+                try:
+                    return not self.ws.is_closing()
+                except AttributeError:
+                    # As a fallback, assume it's still connected if we have a ws object
+                    return True
+        return False
     
     @property
     def connection_url(self) -> str:
@@ -124,7 +154,7 @@ class WebSocketConnection:
             self.ws = await asyncio.wait_for(
                 websockets.connect(
                     self.connection_url,
-                    extra_headers=self.headers,
+                    additional_headers=self.headers,  # Updated from extra_headers to additional_headers
                     ssl=self.ssl_context
                 ),
                 timeout=self.timeout
@@ -257,9 +287,13 @@ class WebSocketConnection:
                     logger.warning(f"Received unexpected message: {message}")
         except asyncio.CancelledError:
             logger.debug("Receive task cancelled")
-        except ConnectionClosed as e:
+        except websockets_connection_closed_exceptions as e:
             self._connected = False
-            error_message = get_error_from_close_reason(str(e.reason))
+            # Handle different exception formats
+            try:
+                error_message = get_error_from_close_reason(str(e.reason))
+            except AttributeError:
+                error_message = str(e)
             logger.error(f"Connection closed: {error_message}")
             
             if self.on_disconnected:
