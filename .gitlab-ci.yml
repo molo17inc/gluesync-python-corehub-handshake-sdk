@@ -23,6 +23,9 @@ before_script:
 
 run_tests:
   stage: test
+  only:
+    - develop
+    - merge_requests
   script:
     - pytest -v tests/
   artifacts:
