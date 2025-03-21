@@ -151,14 +151,37 @@ class WebSocketConnection:
         """
         try:
             # Connect to the WebSocket server
-            self.ws = await asyncio.wait_for(
-                websockets.connect(
-                    self.connection_url,
-                    additional_headers=self.headers,  # Updated from extra_headers to additional_headers
-                    ssl=self.ssl_context
-                ),
-                timeout=self.timeout
-            )
+            try:
+                # Try with additional_headers (websockets >= 11.0)
+                self.ws = await asyncio.wait_for(
+                    websockets.connect(
+                        self.connection_url,
+                        additional_headers=self.headers,
+                        ssl=self.ssl_context
+                    ),
+                    timeout=self.timeout
+                )
+            except TypeError:
+                try:
+                    # Try with extra_headers (websockets >= 10.0, < 11.0)
+                    self.ws = await asyncio.wait_for(
+                        websockets.connect(
+                            self.connection_url,
+                            extra_headers=self.headers,
+                            ssl=self.ssl_context
+                        ),
+                        timeout=self.timeout
+                    )
+                except TypeError:
+                    # Fallback for older versions (no headers support)
+                    logger.warning("Websockets version does not support headers, connecting without them")
+                    self.ws = await asyncio.wait_for(
+                        websockets.connect(
+                            self.connection_url,
+                            ssl=self.ssl_context
+                        ),
+                        timeout=self.timeout
+                    )
             logger.info(f"Connected to {self.connection_url}")
             
             # Start the handshake by sending "hello"
