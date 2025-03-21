@@ -1,0 +1,42 @@
+Connection of an external module to the CoreHub for authentication
+
+WebSocket Path: "/ext-module"
+
+Required Headers: 
+ - Module-License: Token read from the gs-license.dat file
+ - Module-Tag: Internal name matching internal name in agents.json
+ 
+Errors (sent as close reason through WebSocket):
+ - Missing License in Header
+        Error Code: NOT_CONSISTENT
+        Message: Missing module license in header. Please try again.
+        
+ - Missing Tag in Header
+        Error Code: NOT_CONSISTENT
+        Message: Missing module tag in header. Please try again.
+        
+ - Invalid or expired license 
+        Error Code: VIOLATED_POLICY
+        Message: License not valid or expired
+        
+ - Every other error can happen on server 
+        Error Code: INTERNAL_ERROR
+        Message: Something went wrong, check CoreHub logs for more information.
+        
+ - Connection closed abnormally
+        Error Code: CLOSED_ABNORMALLY
+        Message: Connection was closed without close frame
+        
+Flow description:
+An external module must necessarily have the headers described above in order to be authenticated.
+The license will be read from the header and validated. In the event of an invalid licence, the connection will be closed.
+
+The checks on the presence of the headers and the licence will be carried out when the client sends the first hello message.
+This first message must be a Text Frame containing only the byte array representing the string ‘hello’.
+
+Once the hello message has been received, the CoreHub performs the appropriate checks and if all validated, generates a new token which is sent to the module via a Text Frame containing only the byte array representing the jwt token string.
+
+This token will be the one to be used by the module to make any rest calls to the CoreHub endpoints.
+
+Once the connection is instantiated, the module sends a ping message via a Text Frame containing only the byte array representing the string ‘ping’ to the CoreHub which will respond with a Text Frame containing only the byte array representing the string ‘pong’.
+This mechanism allows the connection to remain open and the CoreHub to notify to the UI when the module connects/disconnects.
