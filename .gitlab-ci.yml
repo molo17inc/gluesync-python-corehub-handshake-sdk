@@ -3,7 +3,6 @@ image: python:3.11-slim
 default:
   tags:
     - gs-docker-performance-test
-
 stages:
   - test
 
@@ -24,6 +23,7 @@ before_script:
 run_tests:
   stage: test
   only:
+    - main
     - develop
     - merge_requests
   script:
