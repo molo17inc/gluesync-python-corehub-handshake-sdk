@@ -3,11 +3,18 @@ image: python:3.11-slim
 default:
   tags:
     - gs-runners-hq
+    
+services:
+  - name: molo17/gluesync-core-hub:latest
+    alias: corehub
+    command: [""]
 stages:
   - test
 
 variables:
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.pip-cache"
+  CI: "true"
+  DOCKER_HOST_NETWORK: "true"
 
 cache:
   paths:
@@ -15,11 +22,12 @@ cache:
 
 before_script:
   - python -V
-  - apt-get update && apt-get install -y gcc python3-dev
+  - apt-get update && apt-get install -y gcc python3-dev docker.io
   - pip install -U pip
   - pip install -e .
-  - pip install pytest pytest-asyncio
+  - pip install pytest pytest-asyncio pytest-timeout
   - echo "$GLUESYNC_LICENSE_CONTENT" > gs-license.dat
+  - docker run -d --network host molo17/gluesync-core-hub:latest
 
 run_tests:
   stage: test
@@ -28,7 +36,7 @@ run_tests:
     - develop
     - merge_requests
   script:
-    - pytest -v --asyncio-mode=strict --junitxml=report.xml tests/
+    - pytest -v --asyncio-mode=strict --junitxml=report.xml --timeout=30 tests/
   artifacts:
     reports:
       junit: report.xml

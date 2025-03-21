@@ -11,6 +11,7 @@ import logging
 import socket
 import sys
 import time
+import os
 import pytest
 from threading import Thread
 
@@ -27,6 +28,12 @@ START_PORT = 1717
 PORT_RANGE = 10
 BROADCAST_INTERVAL = 1.0  # seconds
 
+# Flag to control the broadcast thread
+running = True
+
+# Check if running in CI environment
+IN_CI = os.environ.get('CI', 'false').lower() == 'true'
+
 
 def simulate_corehub_broadcast():
     """
@@ -39,7 +46,7 @@ def simulate_corehub_broadcast():
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
     
     try:
-        while True:
+        while running:
             # Broadcast to all ports in the range
             for port in range(START_PORT + 1, START_PORT + PORT_RANGE + 1):
                 logger.debug(f"Broadcasting to port {port}")
@@ -58,7 +65,16 @@ async def test_discovery():
     """
     Test the discovery functionality by importing and using the CoreHubDiscovery class.
     """
+    global running
     try:
+        # Start the simulated CoreHub broadcast in a separate thread
+        broadcast_thread = Thread(target=simulate_corehub_broadcast)
+        broadcast_thread.daemon = True
+        broadcast_thread.start()
+        
+        # Give the broadcast a moment to start
+        await asyncio.sleep(1)
+        
         # Import the discovery module
         from gluesync_sdk.discovery import CoreHubDiscovery, get_corehub_address
         
@@ -76,9 +92,14 @@ async def test_discovery():
             address = await get_corehub_address(start_port=START_PORT, port_range=PORT_RANGE)
             logger.info(f"SUCCESS! get_corehub_address returned {address}")
             
+            # Clean up
+            running = False
+            broadcast_thread.join(timeout=2)
             return True
         except Exception as e:
             logger.error(f"Discovery failed: {e}")
+            running = False
+            broadcast_thread.join(timeout=2)
             return False
             
     except ImportError as e:
@@ -86,6 +107,9 @@ async def test_discovery():
         return False
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
+        running = False
+        if 'broadcast_thread' in locals():
+            broadcast_thread.join(timeout=2)
         return False
 
 
@@ -93,25 +117,21 @@ async def main():
     """
     Main entry point for the test script.
     """
-    # Start the simulated CoreHub broadcast in a separate thread
-    broadcast_thread = Thread(target=simulate_corehub_broadcast)
-    broadcast_thread.daemon = True
-    broadcast_thread.start()
-    
-    # Give the broadcast a moment to start
-    await asyncio.sleep(1)
+    global running
     
     # Test the discovery
     success = await test_discovery()
     
-    # Wait for user to terminate
     if success:
-        logger.info("Test completed successfully! Press Ctrl+C to exit.")
-        try:
-            while True:
-                await asyncio.sleep(1)
-        except KeyboardInterrupt:
-            pass
+        logger.info("Test completed successfully!")
+        if not IN_CI:
+            # Only wait for user termination if not in CI
+            logger.info("Press Ctrl+C to exit.")
+            try:
+                while True:
+                    await asyncio.sleep(1)
+            except KeyboardInterrupt:
+                pass
     else:
         logger.error("Test failed.")
         return 1

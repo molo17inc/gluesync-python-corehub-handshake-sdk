@@ -31,6 +31,9 @@ BROADCAST_INTERVAL = 1.0  # seconds
 # Flag to control the broadcast thread
 running = True
 
+# Check if running in CI environment
+IN_CI = os.environ.get('CI', 'false').lower() == 'true'
+
 def simulate_corehub_broadcast():
     """
     Simulates a CoreHub broadcasting discovery messages.
@@ -61,7 +64,16 @@ async def test_client_autodiscovery():
     """
     Test the GluesyncClient with autodiscovery.
     """
+    global running
     try:
+        # Start the simulated CoreHub broadcast in a separate thread
+        broadcast_thread = threading.Thread(target=simulate_corehub_broadcast)
+        broadcast_thread.daemon = True
+        broadcast_thread.start()
+        
+        # Give the broadcast a moment to start
+        await asyncio.sleep(1)
+        
         from gluesync_sdk import GluesyncClient
         
         logger.info("Creating GluesyncClient with autodiscovery...")
@@ -95,12 +107,19 @@ async def test_client_autodiscovery():
             
             if client.host:
                 logger.info("SUCCESS! Client autodiscovery worked correctly.")
-                return True
+                success = True
             else:
                 logger.error("Client autodiscovery failed to set the host.")
-                return False
+                success = False
+                
+            # Clean up
+            running = False
+            broadcast_thread.join(timeout=2)
+            return success
         except Exception as e:
             logger.error(f"Error during connect/autodiscovery: {e}")
+            running = False
+            broadcast_thread.join(timeout=2)
             return False
             
     except ImportError as e:
@@ -108,6 +127,9 @@ async def test_client_autodiscovery():
         return False
     except Exception as e:
         logger.error(f"Error testing client autodiscovery: {e}")
+        running = False
+        if 'broadcast_thread' in locals():
+            broadcast_thread.join(timeout=2)
         return False
 
 async def main():
@@ -120,20 +142,8 @@ async def main():
     with open("dummy-license.dat", "w") as f:
         f.write("This is a dummy license file for testing")
     
-    # Start the simulated CoreHub broadcast in a separate thread
-    broadcast_thread = threading.Thread(target=simulate_corehub_broadcast)
-    broadcast_thread.daemon = True
-    broadcast_thread.start()
-    
-    # Give the broadcast a moment to start
-    await asyncio.sleep(1)
-    
     # Test the client with autodiscovery
     success = await test_client_autodiscovery()
-    
-    # Clean up
-    running = False
-    broadcast_thread.join(timeout=2)
     
     # Remove the dummy license file
     try:
