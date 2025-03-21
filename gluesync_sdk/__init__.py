@@ -52,6 +52,7 @@ from .exceptions import (
     GluesyncClosedError
 )
 from .utils import create_ssl_context_from_jks
+from .discovery import get_corehub_address, CoreHubDiscovery
 
 # Define public API
 __all__ = [
@@ -64,5 +65,7 @@ __all__ = [
     "GluesyncTimeoutError",
     "GluesyncHandshakeError",
     "GluesyncClosedError",
-    "create_ssl_context_from_jks"
+    "create_ssl_context_from_jks",
+    "get_corehub_address",
+    "CoreHubDiscovery"
 ]

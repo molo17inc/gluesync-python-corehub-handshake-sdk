@@ -14,7 +14,7 @@ import sys
 import os
 import signal
 
-from Gluesync_sdk import (
+from gluesync_sdk import (
     GluesyncClient,
     GluesyncError,
     GluesyncConnectionError,
@@ -30,7 +30,10 @@ logging.basicConfig(
 logger = logging.getLogger("Gluesync-example")
 
 # Configuration
-HOST = "127.0.0.1"  # CoreHub hostname or IP
+# Set HOST to None to use UDP autodiscovery
+# Or set HOST to an IP address to bypass autodiscovery
+# HOST = "127.0.0.1"  # Fixed CoreHub hostname or IP
+HOST = os.environ.get("CORE_HUB_ADDRESS", None)  # Use env var or autodiscovery
 PORT = 1717  # CoreHub port
 LICENSE_FILE = "gs-license.dat"  # Path to license file
 MODULE_TAG = "example-python-module"  # Module tag/name
@@ -103,7 +106,7 @@ async def main():
     try:
         # Create the client
         client = GluesyncClient(
-            host=HOST,
+            host=HOST,  # If None, will use UDP autodiscovery
             port=PORT,
             license_file_path=LICENSE_FILE,
             module_tag=MODULE_TAG,
@@ -111,6 +114,11 @@ async def main():
             keystore_path=KEYSTORE_PATH,
             keystore_password=KEYSTORE_PASSWORD
         )
+        
+        if HOST is None:
+            logger.info("Using UDP autodiscovery to find CoreHub...")
+        else:
+            logger.info(f"Using provided CoreHub address: {HOST}")
         
         # Set up event handlers
         client.on_connected = on_connected

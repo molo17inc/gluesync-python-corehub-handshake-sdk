@@ -8,20 +8,21 @@ A Python client-side SDK for connecting to Gluesync CoreHub services. This SDK e
 - **Automated Handshake Process**: Handles the complete authentication flow with Gluesync CoreHub
 - **License Management**: Validates and processes license files required for authentication
 - **Keep-Alive Mechanism**: Implements ping/pong protocol to maintain persistent connections
+- **UDP Autodiscovery**: Automatically discovers CoreHub on the local network
 - **Async Support**: Built on top of modern async Python frameworks
 - **Cross-Platform Compatibility**: Works on Linux, macOS, and Windows
 
 ## Installation
 
 ```bash
-pip install Gluesync-sdk
+pip install gluesync-sdk
 ```
 
 ## Quick Start
 
 ```python
 import asyncio
-from Gluesync_sdk import GluesyncClient
+from gluesync_sdk import GluesyncClient
 
 async def main():
     # Initialize the client with CoreHub address and license file path
@@ -50,11 +51,48 @@ if __name__ == "__main__":
 
 ## Advanced Usage
 
+### Using UDP Autodiscovery
+
+The SDK can automatically discover CoreHub on the local network using UDP:
+
+```python
+import asyncio
+from gluesync_sdk import GluesyncClient
+
+async def main():
+    # Initialize the client without specifying a host to use autodiscovery
+    client = GluesyncClient(
+        # host parameter is omitted to enable autodiscovery
+        license_file_path="/path/to/gs-license.dat",
+        module_tag="my-module"
+    )
+    
+    # Connect will automatically discover the CoreHub on the network
+    await client.connect()
+    
+    # Do your work here
+    
+    # Disconnect when done
+    await client.disconnect()
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+You can also use the environment variable `CORE_HUB_ADDRESS` to bypass autodiscovery:
+
+```python
+import os
+
+# Set this to bypass autodiscovery
+os.environ["CORE_HUB_ADDRESS"] = "192.168.1.100"
+```
+
 ### Using SSL/TLS with JKS Certificates
 
 ```python
 import asyncio
-from Gluesync_sdk import GluesyncClient
+from gluesync_sdk import GluesyncClient
 
 async def main():
     client = GluesyncClient(
@@ -78,7 +116,7 @@ if __name__ == "__main__":
 
 ```python
 import asyncio
-from Gluesync_sdk import GluesyncClient
+from gluesync_sdk import GluesyncClient
 
 async def on_connected(token):
     print(f"Connected! Received token: {token}")
@@ -123,15 +161,17 @@ The main class for interacting with Gluesync CoreHub.
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| host | str | Yes | - | The hostname or IP of the CoreHub |
-| port | int | Yes | - | The port number for the CoreHub WebSocket |
-| license_file_path | str | Yes | - | Path to the gs-license.dat file |
-| module_tag | str | Yes | - | The module identifier tag |
+| host | str | No | None | The hostname or IP of the CoreHub. If None, autodiscovery will be used |
+| port | int | No | 1717 | The port number for the CoreHub WebSocket |
+| license_file_path | str | No | "gs-license.dat" | Path to the gs-license.dat file |
+| module_tag | str | No | "python-module" | The module identifier tag |
 | ssl | bool | No | False | Whether to use SSL/TLS |
 | keystore_path | str | No | None | Path to JKS keystore file (required if ssl=True) |
 | keystore_password | str | No | None | Password for the JKS keystore |
 | ping_interval | float | No | 1.0 | Interval in seconds between ping messages |
 | timeout | float | No | 10.0 | Connection timeout in seconds |
+| discovery_start_port | int | No | 1717 | The base port number for UDP discovery |
+| discovery_port_range | int | No | 10 | Number of ports to scan for UDP discovery |
 
 #### Methods
 
@@ -164,8 +204,8 @@ Example:
 
 ```python
 import asyncio
-from Gluesync_sdk import GluesyncClient
-from Gluesync_sdk.exceptions import GluesyncAuthenticationError, GluesyncLicenseError
+from gluesync_sdk import GluesyncClient
+from gluesync_sdk.exceptions import GluesyncAuthenticationError, GluesyncLicenseError
 
 async def main():
     try:
@@ -196,7 +236,7 @@ This project is dual-licensed under:
 
 1. **GNU General Public License (GPL) Version 3** - Available at no cost, but any derivative works must also be licensed under GPL v3.
 
-2. **MOLO17 Commercial License** - For proprietary use, includes warranty. Contact MOLO17 at info@molo17.com for licensing terms and conditions.
+2. **MOLO17 Commercial License** - For proprietary use, includes warranty. Contact MOLO17 at [info@molo17.com](mailto:info@molo17.com) for licensing terms and conditions.
 
 ## Contributing
 
@@ -204,4 +244,4 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## Support
 
-For support, please contact MOLO17 at info@molo17.com.
+For support, please contact MOLO17 at [info@molo17.com](mailto:info@molo17.com).

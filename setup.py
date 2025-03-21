@@ -29,14 +29,14 @@ with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
 setup(
-    name="Gluesync-sdk",
+    name="gluesync-sdk",
     version="0.1.0",
     author="MOLO17",
     author_email="info@molo17.com",
     description="Gluesync client-side SDK for connecting to CoreHub services",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/molo17/Gluesync-python-corehub-handshake-sdk",
+    url="https://github.com/molo17/gluesync-python-corehub-handshake-sdk",
     packages=find_packages(),
     classifiers=[
         "Development Status :: 4 - Beta",
@@ -59,5 +59,5 @@ setup(
         "cryptography>=38.0.0",
         "PyJWT>=2.4.0",
     ],
-    keywords="Gluesync, websocket, corehub, sdk, module",
+    keywords="gluesync, websocket, corehub, sdk, module",
 )

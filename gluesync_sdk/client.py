@@ -31,6 +31,7 @@ from typing import Optional, Dict, Callable, Any, Union
 
 from .connection import WebSocketConnection
 from .utils import create_ssl_context_from_jks
+from .discovery import get_corehub_address
 from .exceptions import (
     GluesyncError,
     GluesyncConnectionError,
@@ -51,15 +52,17 @@ class GluesyncClient:
     
     def __init__(
         self,
-        host: str,
-        port: int,
-        license_file_path: str,
-        module_tag: str,
+        host: Optional[str] = None,
+        port: int = 1717,
+        license_file_path: str = "gs-license.dat",
+        module_tag: str = "python-module",
         ssl: bool = False,
         keystore_path: Optional[str] = None,
         keystore_password: Optional[str] = None,
         ping_interval: float = 1.0,
-        timeout: float = 10.0
+        timeout: float = 10.0,
+        discovery_start_port: int = 1717,
+        discovery_port_range: int = 10
     ):
         """
         Initialize the Gluesync client.
@@ -85,6 +88,8 @@ class GluesyncClient:
         self.use_ssl = ssl
         self.ping_interval = ping_interval
         self.timeout = timeout
+        self.discovery_start_port = discovery_start_port
+        self.discovery_port_range = discovery_port_range
         
         # Store license file path
         self.license_file_path = license_file_path
@@ -192,6 +197,9 @@ class GluesyncClient:
         """
         Connect to the CoreHub and perform the handshake authentication.
         
+        If a host was not explicitly provided in __init__, this method will
+        attempt to discover the CoreHub on the local network before connecting.
+        
         Returns:
             The JWT token received from the server
             
@@ -202,10 +210,24 @@ class GluesyncClient:
         if self.is_connected:
             logger.warning("Already connected to CoreHub")
             return self.token
+        
+        # Use autodiscovery if host is not provided
+        host = self.host
+        if host is None:
+            try:
+                logger.info("No host provided, using UDP autodiscovery to find CoreHub...")
+                host = await get_corehub_address(
+                    start_port=self.discovery_start_port,
+                    port_range=self.discovery_port_range
+                )
+                logger.info(f"CoreHub discovered at {host}")
+            except Exception as e:
+                logger.error(f"Failed to discover CoreHub: {e}")
+                raise GluesyncConnectionError(f"Failed to discover CoreHub: {e}")
             
         # Create a new connection
         self._connection = WebSocketConnection(
-            host=self.host,
+            host=host,
             port=self.port,
             headers=self.get_connection_headers(),
             ssl_context=self.ssl_context,
