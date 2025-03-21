@@ -3,11 +3,12 @@ image: python:3.11-slim
 default:
   tags:
     - gs-runners-hq
-    
 services:
   - name: molo17/gluesync-core-hub:latest
     alias: corehub
-    command: [""]
+    variables:
+      DOCKER_TLS_CERTDIR: ""
+
 stages:
   - test
 
@@ -22,12 +23,11 @@ cache:
 
 before_script:
   - python -V
-  - apt-get update && apt-get install -y gcc python3-dev docker.io
+  - apt-get update && apt-get install -y gcc python3-dev
   - pip install -U pip
   - pip install -e .
   - pip install pytest pytest-asyncio pytest-timeout
   - echo "$GLUESYNC_LICENSE_CONTENT" > gs-license.dat
-  - docker run -d --network host molo17/gluesync-core-hub:latest
 
 run_tests:
   stage: test

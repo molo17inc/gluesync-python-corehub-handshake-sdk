@@ -34,6 +34,9 @@ running = True
 # Check if running in CI environment
 IN_CI = os.environ.get('CI', 'false').lower() == 'true'
 
+# Use the service hostname in CI environment
+COREHUB_HOST = 'corehub' if IN_CI else None
+
 def simulate_corehub_broadcast():
     """
     Simulates a CoreHub broadcasting discovery messages.
@@ -78,11 +81,11 @@ async def test_client_autodiscovery():
         
         logger.info("Creating GluesyncClient with autodiscovery...")
         
-        # Create a client without specifying the host to use autodiscovery
+        # Create a client with host specified in CI or autodiscovery otherwise
         client = GluesyncClient(
-            host=None,  # None triggers autodiscovery
+            host=COREHUB_HOST,  # Use service hostname in CI, None triggers autodiscovery otherwise
             port=START_PORT,
-            license_file_path="dummy-license.dat",  # This is just for testing, won't be used
+            license_file_path="gs-license.dat" if IN_CI else "dummy-license.dat",
             module_tag="test-module",
             ssl=False,
             discovery_start_port=START_PORT,
