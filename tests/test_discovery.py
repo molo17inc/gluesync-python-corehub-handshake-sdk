@@ -11,6 +11,7 @@ import logging
 import socket
 import sys
 import time
+import pytest
 from threading import Thread
 
 # Configure logging
@@ -52,6 +53,7 @@ def simulate_corehub_broadcast():
         sock.close()
 
 
+@pytest.mark.asyncio
 async def test_discovery():
     """
     Test the discovery functionality by importing and using the CoreHubDiscovery class.

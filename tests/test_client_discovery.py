@@ -13,6 +13,7 @@ import time
 import logging
 import sys
 import os
+import pytest
 
 # Configure logging
 logging.basicConfig(
@@ -55,6 +56,7 @@ def simulate_corehub_broadcast():
         sock.close()
         logger.info("Broadcast stopped")
 
+@pytest.mark.asyncio
 async def test_client_autodiscovery():
     """
     Test the GluesyncClient with autodiscovery.

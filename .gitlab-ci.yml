@@ -28,7 +28,7 @@ run_tests:
     - develop
     - merge_requests
   script:
-    - pytest -v tests/
+    - pytest -v --asyncio-mode=strict --junitxml=report.xml tests/
   artifacts:
     reports:
       junit: report.xml
