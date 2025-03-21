@@ -26,12 +26,21 @@ from gluesync_sdk import GluesyncClient
 
 async def main():
     # Initialize the client with CoreHub address and license file path
+    # For fixed address:
     client = GluesyncClient(
         host="localhost", 
         port=1717,
         license_file_path="/path/to/gs-license.dat",
         module_tag="my-module"
     )
+    
+    # Or use UDP autodiscovery (set host to None)
+    # client = GluesyncClient(
+    #    host=None,  # Will use UDP autodiscovery to find CoreHub
+    #    port=1717,
+    #    license_file_path="/path/to/gs-license.dat",
+    #    module_tag="my-module"
+    # )
     
     # Connect to CoreHub
     await client.connect()
@@ -190,6 +199,98 @@ The main class for interacting with Gluesync CoreHub.
 - **`on_connected(token)`**: Called when connection is successfully established
 - **`on_disconnected(reason)`**: Called when connection is closed
 - **`on_error(error)`**: Called when an error occurs
+
+## Advanced Usage
+
+### UDP Autodiscovery
+
+The SDK can automatically discover the CoreHub on the network using UDP broadcasts:
+
+```python
+# Create a client that will use autodiscovery
+client = GluesyncClient(
+    host=None,  # Setting host to None enables autodiscovery
+    port=1717,
+    license_file_path="/path/to/gs-license.dat",
+    module_tag="my-module",
+    discovery_start_port=1717,  # Base port for discovery
+    discovery_port_range=10      # Number of ports to scan
+)
+
+# The CoreHub address will be discovered during connect()
+await client.connect()
+```
+
+### Connection Resilience
+
+Implement an automatic reconnection strategy for your application:
+
+```python
+import asyncio
+from gluesync_sdk import GluesyncClient
+
+# Reconnection settings
+MAX_RECONNECT_ATTEMPTS = 5
+RECONNECT_DELAY = 2.0  # Base delay in seconds
+reconnecting = False
+
+async def on_disconnected(reason):
+    """Handle disconnection and trigger reconnection"""
+    global reconnecting
+    print(f"Disconnected: {reason}")
+    
+    if not reconnecting:
+        reconnecting = True
+        asyncio.create_task(attempt_reconnect())
+
+async def attempt_reconnect():
+    """Attempt to reconnect with exponential backoff"""
+    global client, reconnecting
+    attempt = 0
+    
+    while reconnecting and (attempt < MAX_RECONNECT_ATTEMPTS):
+        attempt += 1
+        delay = min(RECONNECT_DELAY * (2 ** (attempt - 1)), 30)  # Exponential backoff
+        
+        print(f"Reconnecting in {delay:.1f} seconds (attempt {attempt}/{MAX_RECONNECT_ATTEMPTS})")
+        await asyncio.sleep(delay)
+        
+        try:
+            await client.connect()
+            print("Reconnected successfully!")
+            reconnecting = False
+            break
+        except Exception as e:
+            print(f"Reconnection failed: {e}")
+    
+    if reconnecting:
+        print(f"Failed to reconnect after {MAX_RECONNECT_ATTEMPTS} attempts")
+        reconnecting = False
+
+async def main():
+    global client
+    
+    client = GluesyncClient(
+        host=None,  # Use autodiscovery
+        license_file_path="/path/to/gs-license.dat",
+        module_tag="resilient-module"
+    )
+    
+    # Register the disconnection handler
+    client.on_disconnected = on_disconnected
+    
+    try:
+        await client.connect()
+        print(f"Connected with token: {client.token[:10]}...")
+        
+        # Keep the application running
+        while True:
+            await asyncio.sleep(1)
+            
+    except KeyboardInterrupt:
+        await client.disconnect()
+        print("Disconnected")
+```
 
 ## Error Handling
 
