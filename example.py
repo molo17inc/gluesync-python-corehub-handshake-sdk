@@ -43,9 +43,17 @@ HOST = os.environ.get("CORE_HUB_ADDRESS", None)  # Use env var or autodiscovery
 PORT = 1717  # CoreHub port
 LICENSE_FILE = "gs-license.dat"  # Path to license file
 MODULE_TAG = "example-python-module"  # Module tag/name
+
+# SSL Configuration - Choose one of the following approaches:
+
+# Approach 1: Direct SSL parameters
 USE_SSL = False  # Whether to use SSL
 KEYSTORE_PATH = None  # Path to JKS keystore file (if USE_SSL is True)
 KEYSTORE_PASSWORD = None  # Password for JKS keystore (if USE_SSL is True)
+
+# Approach 2: Using security_config.json file
+# This is the recommended approach as it contains all necessary SSL parameters
+SECURITY_CONFIG = "security-config.json"  # Path to security config file
 
 # Reconnection settings
 MAX_RECONNECT_ATTEMPTS = 5  # Number of reconnection attempts (0 for infinite)
@@ -166,6 +174,9 @@ async def main():
     
     try:
         # Create the client
+        # Uncomment the appropriate client creation approach based on your needs:
+        
+        # Approach 1: Using direct SSL parameters
         client = GluesyncClient(
             host=HOST,  # If None, will use UDP autodiscovery
             port=PORT,
@@ -175,6 +186,16 @@ async def main():
             keystore_path=KEYSTORE_PATH,
             keystore_password=KEYSTORE_PASSWORD
         )
+        
+        # Approach 2: Using security_config.json file (recommended)
+        # client = GluesyncClient(
+        #     host=HOST,  # If None, will use UDP autodiscovery
+        #     port=PORT,
+        #     license_file_path=LICENSE_FILE,
+        #     module_tag=MODULE_TAG,
+        #     ssl=True,  # Set to True to enable SSL
+        #     security_config=SECURITY_CONFIG  # Path to security-config.json
+        # )
         
         if HOST is None:
             logger.info("Using UDP autodiscovery to find CoreHub...")

@@ -30,13 +30,15 @@ import tempfile
 from typing import Optional, Tuple
 
 
-def create_ssl_context_from_jks(keystore_path: str, keystore_password: str) -> ssl.SSLContext:
+def create_ssl_context_from_jks(keystore_path: str, keystore_password: str, alias: str = None, key_password: str = None) -> ssl.SSLContext:
     """
     Create an SSL context from a Java KeyStore (JKS) file.
     
     Args:
         keystore_path: Path to the JKS file
         keystore_password: Password for the JKS file
+        alias: Optional alias for the certificate in the keystore
+        key_password: Optional password for the certificate key
         
     Returns:
         SSL context configured with the certificates from the JKS file
@@ -49,8 +51,14 @@ def create_ssl_context_from_jks(keystore_path: str, keystore_password: str) -> s
     
     # Get all certificates from the keystore
     with tempfile.NamedTemporaryFile(delete=False) as ca_cert_file:
-        for alias, cert in ks.certs.items():
+        # If alias is specified, only extract that certificate
+        if alias and alias in ks.certs:
+            cert = ks.certs[alias]
             ca_cert_file.write(cert.cert)
+        else:
+            # Otherwise extract all certificates
+            for cert_alias, cert in ks.certs.items():
+                ca_cert_file.write(cert.cert)
     
     # Load certificates to the SSL context
     context.load_verify_locations(cafile=ca_cert_file.name)

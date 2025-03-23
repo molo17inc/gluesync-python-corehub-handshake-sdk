@@ -59,6 +59,7 @@ class GluesyncClient:
         ssl: bool = False,
         keystore_path: Optional[str] = None,
         keystore_password: Optional[str] = None,
+        security_config: Optional[str] = None,
         ping_interval: float = 1.0,
         timeout: float = 10.0,
         discovery_start_port: int = 1717,
@@ -73,10 +74,13 @@ class GluesyncClient:
             license_file_path: Path to the gs-license.dat file
             module_tag: Name/tag for this module
             ssl: Whether to use SSL/TLS for the connection
-            keystore_path: Path to the JKS keystore file (required if ssl=True)
-            keystore_password: Password for the JKS keystore (required if ssl=True)
+            keystore_path: Path to the JKS keystore file (can be overridden by security_config)
+            keystore_password: Password for the JKS keystore (can be overridden by security_config)
+            security_config: Path to the security configuration JSON file (contains SSL and DH parameters)
             ping_interval: Interval in seconds between ping messages
             timeout: Connection timeout in seconds
+            discovery_start_port: Starting port for CoreHub discovery
+            discovery_port_range: Number of ports to scan during discovery
             
         Raises:
             GluesyncLicenseError: If the license file is invalid
@@ -90,6 +94,7 @@ class GluesyncClient:
         self.timeout = timeout
         self.discovery_start_port = discovery_start_port
         self.discovery_port_range = discovery_port_range
+        self.security_config = security_config
         
         # Store license file path
         self.license_file_path = license_file_path
@@ -98,12 +103,45 @@ class GluesyncClient:
         # SSL context setup
         self.ssl_context = None
         if self.use_ssl:
-            if not keystore_path or not keystore_password:
-                raise GluesyncSSLError("Keystore path and password are required for SSL connections")
-                
             try:
-                self.ssl_context = create_ssl_context_from_jks(keystore_path, keystore_password)
-                logger.info("SSL context created successfully")
+                # If security_config is provided, use it for SSL configuration
+                if security_config:
+                    import json
+                    import os
+                    
+                    if not os.path.exists(security_config):
+                        raise GluesyncSSLError(f"Security config file not found: {security_config}")
+                    
+                    with open(security_config, 'r') as f:
+                        config = json.load(f)
+                    
+                    if 'ssl' not in config:
+                        raise GluesyncSSLError(f"SSL configuration not found in security config file")
+                    
+                    ssl_config = config['ssl']
+                    
+                    # Use the SSL config from the file
+                    jks_path = ssl_config.get('sslCertificatePath')
+                    cert_password = ssl_config.get('certificatePassword')
+                    
+                    if not jks_path or not cert_password:
+                        raise GluesyncSSLError("SSL certificate path and password are required in security config")
+                    
+                    # Create SSL context with the config from the file
+                    self.ssl_context = create_ssl_context_from_jks(
+                        jks_path, 
+                        cert_password,
+                        alias=ssl_config.get('certificateAlias'),
+                        key_password=ssl_config.get('certificateKeyPassword')
+                    )
+                    logger.info("SSL context created successfully from security config")
+                else:
+                    # Fall back to direct parameters if security_config is not provided
+                    if not keystore_path or not keystore_password:
+                        raise GluesyncSSLError("Keystore path and password are required for SSL connections")
+                    
+                    self.ssl_context = create_ssl_context_from_jks(keystore_path, keystore_password)
+                    logger.info("SSL context created successfully")
             except Exception as e:
                 logger.error(f"Failed to create SSL context: {e}")
                 raise GluesyncSSLError(f"Failed to create SSL context: {e}")
