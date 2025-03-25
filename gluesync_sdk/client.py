@@ -104,6 +104,11 @@ class GluesyncClient:
         self.ssl_context = None
         if self.use_ssl:
             try:
+                # Create an SSL context that skips certificate verification
+                self.ssl_context = ssl.create_default_context()
+                self.ssl_context.check_hostname = False
+                self.ssl_context.verify_mode = ssl.CERT_NONE
+                
                 # If security_config is provided, use it for SSL configuration
                 if security_config:
                     import json
