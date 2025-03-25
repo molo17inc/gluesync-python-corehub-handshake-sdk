@@ -109,11 +109,16 @@ class GluesyncClient:
                     import json
                     import os
                     
-                    if not os.path.exists(security_config):
-                        raise GluesyncSSLError(f"Security config file not found: {security_config}")
+                    # Log the absolute path to the security config file
+                    abs_security_config = os.path.abspath(security_config)
+                    logger.info(f"Loading security config from: {abs_security_config}")
                     
-                    with open(security_config, 'r') as f:
+                    if not os.path.exists(abs_security_config):
+                        raise GluesyncSSLError(f"Security config file not found: {abs_security_config}")
+                    
+                    with open(abs_security_config, 'r') as f:
                         config = json.load(f)
+                        logger.info(f"Loaded security config: {config}")
                     
                     if 'ssl' not in config:
                         raise GluesyncSSLError(f"SSL configuration not found in security config file")
@@ -124,24 +129,50 @@ class GluesyncClient:
                     jks_path = ssl_config.get('sslCertificatePath')
                     cert_password = ssl_config.get('certificatePassword')
                     
+                    # Make sure the certificate path is absolute
+                    if jks_path and not os.path.isabs(jks_path):
+                        # If path is relative, resolve it relative to the config file location
+                        config_dir = os.path.dirname(os.path.abspath(security_config))
+                        jks_path = os.path.join(config_dir, jks_path)
+                        logger.info(f"Resolved relative certificate path to: {jks_path}")
+                    
+                    # Log the certificate path
+                    logger.info(f"Using certificate path: {jks_path}")
+                    
                     if not jks_path or not cert_password:
                         raise GluesyncSSLError("SSL certificate path and password are required in security config")
                     
-                    # Create SSL context with the config from the file
-                    self.ssl_context = create_ssl_context_from_jks(
-                        jks_path, 
-                        cert_password,
-                        alias=ssl_config.get('certificateAlias'),
-                        key_password=ssl_config.get('certificateKeyPassword')
-                    )
-                    logger.info("SSL context created successfully from security config")
+                    # Verify certificate file exists
+                    if not os.path.exists(jks_path):
+                        raise GluesyncSSLError(f"Certificate file not found at path: {jks_path}")
+                        
+                    try:
+                        # Create SSL context with the config from the file
+                        self.ssl_context = create_ssl_context_from_jks(
+                            jks_path, 
+                            cert_password,
+                            alias=ssl_config.get('certificateAlias'),
+                            key_password=ssl_config.get('certificateKeyPassword')
+                        )
+                        logger.info("SSL context created successfully from security config")
+                    except Exception as e:
+                        logger.error(f"Failed to create SSL context from {jks_path}: {str(e)}")
+                        raise GluesyncSSLError(f"Failed to create SSL context: {str(e)}")
                 else:
                     # Fall back to direct parameters if security_config is not provided
                     if not keystore_path or not keystore_password:
                         raise GluesyncSSLError("Keystore path and password are required for SSL connections")
                     
-                    self.ssl_context = create_ssl_context_from_jks(keystore_path, keystore_password)
-                    logger.info("SSL context created successfully")
+                    # Verify certificate file exists
+                    if not os.path.exists(keystore_path):
+                        raise GluesyncSSLError(f"Certificate file not found at path: {keystore_path}")
+                        
+                    try:
+                        self.ssl_context = create_ssl_context_from_jks(keystore_path, keystore_password)
+                        logger.info("SSL context created successfully")
+                    except Exception as e:
+                        logger.error(f"Failed to create SSL context from {keystore_path}: {str(e)}")
+                        raise GluesyncSSLError(f"Failed to create SSL context: {str(e)}")
             except Exception as e:
                 logger.error(f"Failed to create SSL context: {e}")
                 raise GluesyncSSLError(f"Failed to create SSL context: {e}")

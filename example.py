@@ -47,8 +47,11 @@ MODULE_TAG = "example-python-module"  # Module tag/name
 # SSL Configuration - Choose one of the following approaches:
 
 # Approach 1: Direct SSL parameters
-USE_SSL = False  # Whether to use SSL
+USE_SSL = True  # Whether to use SSL
 KEYSTORE_PATH = None  # Path to JKS keystore file (if USE_SSL is True)
+
+# Approach 2: Use security-config.json
+SECURITY_CONFIG = "security-config.json"  # Path to security config file
 KEYSTORE_PASSWORD = None  # Password for JKS keystore (if USE_SSL is True)
 
 # Approach 2: Using security_config.json file
@@ -176,15 +179,14 @@ async def main():
         # Create the client
         # Uncomment the appropriate client creation approach based on your needs:
         
-        # Approach 1: Using direct SSL parameters
+        # Using security-config.json for SSL configuration
         client = GluesyncClient(
             host=HOST,  # If None, will use UDP autodiscovery
             port=PORT,
             license_file_path=LICENSE_FILE,
             module_tag=MODULE_TAG,
             ssl=USE_SSL,
-            keystore_path=KEYSTORE_PATH,
-            keystore_password=KEYSTORE_PASSWORD
+            security_config=SECURITY_CONFIG
         )
         
         # Approach 2: Using security_config.json file (recommended)
