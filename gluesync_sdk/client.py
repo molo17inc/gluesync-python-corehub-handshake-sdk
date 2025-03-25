@@ -63,7 +63,8 @@ class GluesyncClient:
         ping_interval: float = 1.0,
         timeout: float = 10.0,
         discovery_start_port: int = 1717,
-        discovery_port_range: int = 10
+        discovery_port_range: int = 10,
+        verify_ssl: bool = True
     ):
         """
         Initialize the Gluesync client.
@@ -81,6 +82,7 @@ class GluesyncClient:
             timeout: Connection timeout in seconds
             discovery_start_port: Starting port for CoreHub discovery
             discovery_port_range: Number of ports to scan during discovery
+            verify_ssl: Whether to verify the SSL certificate
             
         Raises:
             GluesyncLicenseError: If the license file is invalid
@@ -95,6 +97,7 @@ class GluesyncClient:
         self.discovery_start_port = discovery_start_port
         self.discovery_port_range = discovery_port_range
         self.security_config = security_config
+        self.verify_ssl = verify_ssl
         
         # Store license file path
         self.license_file_path = license_file_path
@@ -104,10 +107,10 @@ class GluesyncClient:
         self.ssl_context = None
         if self.use_ssl:
             try:
-                # Create an SSL context that skips certificate verification
+                # Create an SSL context that skips certificate verification if verify_ssl is False
                 self.ssl_context = ssl.create_default_context()
-                self.ssl_context.check_hostname = False
-                self.ssl_context.verify_mode = ssl.CERT_NONE
+                self.ssl_context.check_hostname = self.verify_ssl
+                self.ssl_context.verify_mode = ssl.CERT_REQUIRED if self.verify_ssl else ssl.CERT_NONE
                 
                 # If security_config is provided, use it for SSL configuration
                 if security_config:
