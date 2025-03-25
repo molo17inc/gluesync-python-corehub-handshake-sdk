@@ -126,7 +126,7 @@ class GluesyncClient:
                     
                     with open(abs_security_config, 'r') as f:
                         config = json.load(f)
-                        logger.info(f"Loaded security config: {config}")
+                        # logger.info(f"Loaded security config: {config}")
                     
                     if 'ssl' not in config:
                         raise GluesyncSSLError(f"SSL configuration not found in security config file")
