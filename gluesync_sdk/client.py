@@ -295,7 +295,9 @@ class GluesyncClient:
                 logger.info("No host provided, using UDP autodiscovery to find CoreHub...")
                 host = await get_corehub_address(
                     start_port=self.discovery_start_port,
-                    port_range=self.discovery_port_range
+                    port_range=self.discovery_port_range,
+                    ssl_context=self.ssl_context,
+                    verify_ssl=self.verify_ssl
                 )
                 # Save the discovered host to the instance
                 self.host = host
@@ -311,7 +313,8 @@ class GluesyncClient:
             headers=self.get_connection_headers(),
             ssl_context=self.ssl_context,
             ping_interval=self.ping_interval,
-            timeout=self.timeout
+            timeout=self.timeout,
+            verify_ssl=self.verify_ssl
         )
         
         # Set up event handlers

@@ -72,7 +72,8 @@ class WebSocketConnection:
         headers: Dict[str, str],
         ssl_context: Optional[ssl.SSLContext] = None,
         ping_interval: float = 1.0,
-        timeout: float = 10.0
+        timeout: float = 10.0,
+        verify_ssl: bool = True
     ):
         """
         Initialize the WebSocket connection.
@@ -84,6 +85,7 @@ class WebSocketConnection:
             ssl_context: SSL context for secure connections (optional)
             ping_interval: Interval in seconds between ping messages
             timeout: Connection timeout in seconds
+            verify_ssl: Whether to verify SSL certificates (default: True)
         """
         self.host = host
         self.port = port
@@ -91,6 +93,12 @@ class WebSocketConnection:
         self.ssl_context = ssl_context
         self.ping_interval = ping_interval
         self.timeout = timeout
+        self.verify_ssl = verify_ssl
+        
+        # If SSL context is provided but verify_ssl is False, modify the context
+        if self.ssl_context and not self.verify_ssl:
+            self.ssl_context.check_hostname = False
+            self.ssl_context.verify_mode = ssl.CERT_NONE
         
         self.ws = None
         self.token = None
