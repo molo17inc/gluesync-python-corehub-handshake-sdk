@@ -56,7 +56,7 @@ class GluesyncClient:
         port: int = 1717,
         license_file_path: str = "gs-license.dat",
         module_tag: str = "python-module",
-        ssl: bool = False,
+        use_ssl: bool = False,
         keystore_path: Optional[str] = None,
         keystore_password: Optional[str] = None,
         security_config: Optional[str] = None,
@@ -74,7 +74,7 @@ class GluesyncClient:
             port: Port number for the CoreHub WebSocket
             license_file_path: Path to the gs-license.dat file
             module_tag: Name/tag for this module
-            ssl: Whether to use SSL/TLS for the connection
+            use_ssl: Whether to use SSL/TLS for the connection
             keystore_path: Path to the JKS keystore file (can be overridden by security_config)
             keystore_password: Password for the JKS keystore (can be overridden by security_config)
             security_config: Path to the security configuration JSON file (contains SSL and DH parameters)
@@ -91,7 +91,7 @@ class GluesyncClient:
         self.host = host
         self.port = port
         self.module_tag = module_tag
-        self.use_ssl = ssl
+        self.use_ssl = use_ssl
         self.ping_interval = ping_interval
         self.timeout = timeout
         self.discovery_start_port = discovery_start_port
