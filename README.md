@@ -31,7 +31,9 @@ async def main():
         host="localhost", 
         port=1717,
         license_file_path="/path/to/gs-license.dat",
-        module_tag="my-module"
+        module_tag="my-module",
+        use_ssl=True,  # Enable SSL/TLS
+        verify_ssl=False  # Disable SSL certificate verification
     )
     
     # Or use UDP autodiscovery (set host to None)
@@ -39,7 +41,9 @@ async def main():
     #    host=None,  # Will use UDP autodiscovery to find CoreHub
     #    port=1717,
     #    license_file_path="/path/to/gs-license.dat",
-    #    module_tag="my-module"
+    #    module_tag="my-module",
+    #    use_ssl=True,  # Enable SSL/TLS
+    #    verify_ssl=False  # Disable SSL certificate verification
     # )
     
     # Connect to CoreHub

@@ -55,9 +55,13 @@ class CoreHubDiscovery:
         self.port_range = port_range
         self.port_list = list(range(start_port + 1, start_port + port_range + 1))
     
-    async def discover_corehub(self) -> str:
+    async def discover_corehub(self, ssl_context=None, verify_ssl: bool = True) -> str:
         """
         Listen for the CoreHub broadcast message and return the CoreHub IP address.
+        
+        Args:
+            ssl_context: SSL context to use for secure connections
+            verify_ssl: Whether to verify SSL certificates (default: True)
         
         Returns:
             The IP address of the CoreHub as a string
@@ -129,7 +133,9 @@ class CoreHubDiscovery:
 
 async def get_corehub_address(env_var_name: str = "CORE_HUB_ADDRESS", 
                             start_port: int = DEFAULT_START_PORT,
-                            port_range: int = DEFAULT_PORT_RANGE) -> str:
+                            port_range: int = DEFAULT_PORT_RANGE,
+                            ssl_context = None,
+                            verify_ssl: bool = True) -> str:
     """
     Get the CoreHub address from environment variable or via autodiscovery.
     
@@ -137,6 +143,8 @@ async def get_corehub_address(env_var_name: str = "CORE_HUB_ADDRESS",
         env_var_name: Name of the environment variable that might contain the CoreHub address
         start_port: The base port number to use for discovery
         port_range: The number of ports to scan (starting from start_port + 1)
+        ssl_context: SSL context to use for secure connections
+        verify_ssl: Whether to verify SSL certificates (default: True)
         
     Returns:
         The IP address of the CoreHub as a string
@@ -155,7 +163,7 @@ async def get_corehub_address(env_var_name: str = "CORE_HUB_ADDRESS",
     logger.info("CoreHub address not provided, attempting autodiscovery...")
     try:
         discovery = CoreHubDiscovery(start_port=start_port, port_range=port_range)
-        return await discovery.discover_corehub()
+        return await discovery.discover_corehub(ssl_context=ssl_context, verify_ssl=verify_ssl)
     except Exception as e:
         logger.error(f"Failed to discover CoreHub: {e}")
         raise ConnectionError(f"Failed to discover CoreHub. Please provide the CoreHub address via the {env_var_name} environment variable.")
