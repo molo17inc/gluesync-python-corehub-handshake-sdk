@@ -31,7 +31,7 @@ from typing import Optional, Dict, Callable, Any, Union
 
 from .connection import WebSocketConnection
 from .utils import create_ssl_context_from_jks
-from .discovery import get_corehub_address
+from .discovery import get_corehub_address, CoreHubDiscovery
 from .exceptions import (
     GluesyncError,
     GluesyncConnectionError,
@@ -188,11 +188,15 @@ class GluesyncClient:
         # Setup WebSocket connection
         self._connection = None
         self._token = None
+        self._reconnecting = False
+        self._reconnect_task = None
         
         # Event handlers
         self.on_connected: Optional[Callable[[str], Any]] = None
         self.on_disconnected: Optional[Callable[[str], Any]] = None
         self.on_error: Optional[Callable[[Exception], Any]] = None
+        self.on_reconnecting: Optional[Callable[[], Any]] = None
+        self.on_reconnected: Optional[Callable[[str], Any]] = None
     
     @property
     def token(self) -> Optional[str]:
@@ -364,6 +368,10 @@ class GluesyncClient:
         
         if self.on_disconnected:
             await self._call_callback(self.on_disconnected, reason)
+        
+        # Start the reconnection process if not already reconnecting
+        if not self._reconnecting:
+            self._start_reconnect_task()
     
     async def _handle_error(self, error: Exception):
         """
@@ -392,3 +400,91 @@ class GluesyncClient:
                 await result
         except Exception as e:
             logger.error(f"Error in callback: {e}")
+            
+    def _start_reconnect_task(self):
+        """
+        Start the reconnection task if not already running.
+        """
+        if self._reconnect_task is None or self._reconnect_task.done():
+            self._reconnect_task = asyncio.create_task(self._reconnect())
+            
+    async def _reconnect(self):
+        """
+        Reconnection logic. If a host is explicitly specified, tries to reconnect immediately.
+        Otherwise, waits for a broadcast message from CoreHub before attempting to reconnect.
+        """
+        if self._reconnecting:
+            return
+            
+        self._reconnecting = True
+        logger.info("Starting reconnection process...")
+        
+        # Notify listeners that we're trying to reconnect
+        if self.on_reconnecting:
+            await self._call_callback(self.on_reconnecting)
+        
+        try:
+            # If a specific host is provided, try to reconnect directly
+            if self.host:
+                logger.info(f"CoreHub address specified ({self.host}), attempting direct reconnection...")
+                await self._attempt_reconnect()
+            else:
+                # If no host is provided, wait for a broadcast message before reconnecting
+                logger.info("No CoreHub address specified, waiting for broadcast message...")
+                try:
+                    discovery = CoreHubDiscovery(start_port=self.discovery_start_port, port_range=self.discovery_port_range)
+                    corehub_address = await discovery.discover_corehub(ssl_context=self.ssl_context, verify_ssl=self.verify_ssl)
+                    
+                    # Save the discovered host
+                    self.host = corehub_address
+                    logger.info(f"CoreHub broadcast received from {corehub_address}, attempting reconnection...")
+                    
+                    # Now attempt to reconnect with the discovered address
+                    await self._attempt_reconnect()
+                except Exception as e:
+                    logger.error(f"Failed to discover CoreHub: {e}")
+                    # Set reconnecting to false to allow future reconnection attempts
+                    self._reconnecting = False
+        except Exception as e:
+            logger.error(f"Error during reconnection: {e}")
+            # Set reconnecting to false to allow future reconnection attempts
+            self._reconnecting = False
+            
+    async def _attempt_reconnect(self):
+        """
+        Attempt to reconnect to the CoreHub.
+        """
+        try:
+            # Create a new connection
+            self._connection = WebSocketConnection(
+                host=self.host,
+                port=self.port,
+                headers=self.get_connection_headers(),
+                ssl_context=self.ssl_context,
+                ping_interval=self.ping_interval,
+                timeout=self.timeout,
+                verify_ssl=self.verify_ssl
+            )
+            
+            # Set up event handlers
+            self._connection.on_connected = self._handle_connected
+            self._connection.on_disconnected = self._handle_disconnected
+            self._connection.on_error = self._handle_error
+            
+            # Connect to the server
+            token = await self._connection.connect()
+            self._token = token
+            
+            # Successfully reconnected
+            logger.info(f"Successfully reconnected to CoreHub at {self.host}:{self.port}")
+            self._reconnecting = False
+            
+            # Notify listeners that we've reconnected
+            if self.on_reconnected:
+                await self._call_callback(self.on_reconnected, token)
+                
+            return token
+        except Exception as e:
+            logger.error(f"Reconnection attempt failed: {e}")
+            self._reconnecting = False
+            raise
