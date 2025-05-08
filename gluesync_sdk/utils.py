@@ -279,13 +279,11 @@ def create_ssl_context_from_jks(keystore_path: str, keystore_password: str, alia
     passwords_to_try = [keystore_password]
     if keystore_password and any(c.isupper() for c in keystore_password):
         passwords_to_try.append(keystore_password.lower())
-        logger.info(f"Will also try lowercase password: {keystore_password.lower()}")
     
     # First try using the cryptography library (most flexible)
     if CRYPTOGRAPHY_AVAILABLE:
         for password in passwords_to_try:
             try:
-                logger.info(f"Attempting to load {keystore_path} using cryptography library with password: {password}")
                 actual_key_pwd = key_password or password
                 context, format_type = create_ssl_context_with_cryptography(keystore_path, actual_key_pwd)
                 logger.info(f"Successfully loaded certificate as {format_type} format")
@@ -293,7 +291,7 @@ def create_ssl_context_from_jks(keystore_path: str, keystore_password: str, alia
             except Exception as e:
                 # Only log the first error in detail
                 if password == passwords_to_try[0]:
-                    logger.info(f"Cryptography loading failed with password {password}: {e}")
+                    logger.info(f"Cryptography loading failed: {e}")
                     exceptions.append(f"Cryptography: {e}")
     else:
         logger.warning("Cryptography library not available, using fallback methods")
@@ -301,20 +299,20 @@ def create_ssl_context_from_jks(keystore_path: str, keystore_password: str, alia
     # Try standard ssl module with PKCS12 loading
     for password in passwords_to_try:
         try:
-            logger.info(f"Attempting to load {keystore_path} as PKCS12 format with password: {password}")
+            logger.info(f"Attempting to load {keystore_path} as PKCS12 format")
             context = create_ssl_context_from_pkcs12(keystore_path, password)
-            logger.info(f"Successfully loaded certificate as PKCS12 format with password: {password}")
+            logger.info(f"Successfully loaded certificate as PKCS12 format")
             return context
         except Exception as e:
             # Only log the first error in detail
             if password == passwords_to_try[0]:
-                logger.info(f"PKCS12 loading failed with password {password}: {e}")
+                logger.info(f"PKCS12 loading failed: {e}")
                 exceptions.append(f"PKCS12: {e}")
     
     # Finally try JKS format with both passwords
     for password in passwords_to_try:
         try:
-            logger.info(f"Attempting to load {keystore_path} as JKS format with password: {password}")
+            logger.info(f"Attempting to load {keystore_path} as JKS format")
             # Create a default SSL context
             context = ssl.create_default_context()
             
@@ -342,12 +340,12 @@ def create_ssl_context_from_jks(keystore_path: str, keystore_password: str, alia
             context.check_hostname = True
             context.verify_mode = ssl.CERT_REQUIRED
             
-            logger.info(f"SSL context created successfully from JKS file with password: {password}")
+            logger.info(f"SSL context created successfully from JKS file")
             return context
         except Exception as e:
             # Only log the first error in detail
             if password == passwords_to_try[0]:
-                logger.info(f"JKS loading failed with password {password}: {e}")
+                logger.info(f"JKS loading failed: {e}")
                 exceptions.append(f"JKS: {e}")
     
     # If we reached here, all methods failed
