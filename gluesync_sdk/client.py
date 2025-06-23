@@ -197,6 +197,7 @@ class GluesyncClient:
         self.on_error: Optional[Callable[[Exception], Any]] = None
         self.on_reconnecting: Optional[Callable[[], Any]] = None
         self.on_reconnected: Optional[Callable[[str], Any]] = None
+        self.on_token_updated: Optional[Callable[[str], Any]] = None
     
     @property
     def token(self) -> Optional[str]:
@@ -356,6 +357,10 @@ class GluesyncClient:
         
         if self.on_connected:
             await self._call_callback(self.on_connected, token)
+            
+        # Notify token update listeners when initially connected
+        if self.on_token_updated:
+            await self._call_callback(self.on_token_updated, token)
     
     async def _handle_disconnected(self, reason: str):
         """
@@ -482,6 +487,10 @@ class GluesyncClient:
             # Notify listeners that we've reconnected
             if self.on_reconnected:
                 await self._call_callback(self.on_reconnected, token)
+                
+            # Always notify token update listeners when reconnected with a new token
+            if self.on_token_updated:
+                await self._call_callback(self.on_token_updated, token)
                 
             return token
         except Exception as e:
