@@ -415,8 +415,8 @@ class GluesyncClient:
             
     async def _reconnect(self):
         """
-        Reconnection logic. If a host is explicitly specified, tries to reconnect immediately.
-        Otherwise, waits for a broadcast message from CoreHub before attempting to reconnect.
+        Reconnection logic. First tries to reconnect to the specified/known host.
+        If that fails, attempts to re-discover the CoreHub in case its IP address has changed.
         """
         if self._reconnecting:
             return
@@ -429,27 +429,43 @@ class GluesyncClient:
             await self._call_callback(self.on_reconnecting)
         
         try:
-            # If a specific host is provided, try to reconnect directly
+            # If a specific host is provided, try to reconnect directly first
             if self.host:
-                logger.info(f"CoreHub address specified ({self.host}), attempting direct reconnection...")
-                await self._attempt_reconnect()
-            else:
-                # If no host is provided, wait for a broadcast message before reconnecting
-                logger.info("No CoreHub address specified, waiting for broadcast message...")
+                logger.info(f"CoreHub address known ({self.host}), attempting direct reconnection...")
                 try:
-                    discovery = CoreHubDiscovery(start_port=self.discovery_start_port, port_range=self.discovery_port_range)
-                    corehub_address = await discovery.discover_corehub(ssl_context=self.ssl_context, verify_ssl=self.verify_ssl)
-                    
-                    # Save the discovered host
-                    self.host = corehub_address
-                    logger.info(f"CoreHub broadcast received from {corehub_address}, attempting reconnection...")
-                    
-                    # Now attempt to reconnect with the discovered address
                     await self._attempt_reconnect()
-                except Exception as e:
-                    logger.error(f"Failed to discover CoreHub: {e}")
-                    # Set reconnecting to false to allow future reconnection attempts
-                    self._reconnecting = False
+                    return  # Successfully reconnected, exit early
+                except Exception as reconnect_error:
+                    logger.warning(f"Direct reconnection to {self.host} failed: {reconnect_error}")
+                    logger.info("CoreHub may have changed IP address, attempting re-discovery...")
+                    
+            # Either no host was provided initially or direct reconnection failed,
+            # so attempt discovery
+            try:
+                # Clear the previous host so we truly re-discover
+                previous_host = self.host
+                self.host = None
+                
+                discovery = CoreHubDiscovery(start_port=self.discovery_start_port, port_range=self.discovery_port_range)
+                corehub_address = await discovery.discover_corehub(ssl_context=self.ssl_context, verify_ssl=self.verify_ssl)
+                
+                # If discovered a new host different from previous one, log it
+                if previous_host and previous_host != corehub_address:
+                    logger.info(f"CoreHub IP changed from {previous_host} to {corehub_address}")
+                    
+                # Save the discovered host
+                self.host = corehub_address
+                logger.info(f"CoreHub discovered at {corehub_address}, attempting reconnection...")
+                
+                # Now attempt to reconnect with the discovered address
+                await self._attempt_reconnect()
+            except Exception as discovery_error:
+                logger.error(f"Failed to discover CoreHub: {discovery_error}")
+                # Restore the previous host in case we want to retry later
+                if previous_host:
+                    self.host = previous_host
+                # Set reconnecting to false to allow future reconnection attempts
+                self._reconnecting = False
         except Exception as e:
             logger.error(f"Error during reconnection: {e}")
             # Set reconnecting to false to allow future reconnection attempts
