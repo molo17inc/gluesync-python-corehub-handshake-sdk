@@ -29,6 +29,22 @@ build_wheel:
     - if: '$CI_COMMIT_TAG =~ /^release-.*$/'
   script:
     - pip3 install --break-system-packages build wheel setuptools
+    # Derive package version from tag: release-<version>
+    - |
+      VERSION="${CI_COMMIT_TAG#release-}"
+      if [ -z "$VERSION" ]; then echo "Version could not be derived from tag $CI_COMMIT_TAG" >&2; exit 1; fi
+      echo "Using package version: $VERSION"
+    - |
+      python3 - <<'PY'
+      import io, re
+      p = 'setup.py'
+      s = io.open(p, 'r', encoding='utf-8').read()
+      ns = re.sub(r'(?m)^(\s*version=)"[^"]+"', rf'\1"{__import__("os").environ["VERSION"]}"', s)
+      if s == ns:
+          print('setup.py version unchanged (pattern not found)?', flush=True)
+      io.open(p, 'w', encoding='utf-8').write(ns)
+      print('setup.py version updated')
+      PY
     - python3 -m build
   artifacts:
     paths:
