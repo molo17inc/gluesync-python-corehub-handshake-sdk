@@ -5,6 +5,7 @@ default:
     - gs-runners-hq
 
 stages:
+  - build
   - test
 
 variables:
@@ -20,10 +21,21 @@ before_script:
   # Install Python and required dependencies
   - apt-get update && apt-get install -y python3 python3-pip python3-dev gcc
   - python3 -V
-  - pip3 install -U pip
-  - pip3 install -e .
-  - pip3 install pytest pytest-asyncio pytest-timeout
+  - pip3 install --break-system-packages -U pip
   - echo "$GLUESYNC_LICENSE_CONTENT" > gs-license.dat
+
+build_wheel:
+  stage: build
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^release-.*$/'
+  script:
+    - pip3 install --break-system-packages build wheel setuptools
+    - python3 -m build
+  artifacts:
+    paths:
+      - dist/*.whl
+      - dist/*.tar.gz
+    expire_in: 1 week
 
 run_tests:
   stage: test
@@ -32,9 +44,23 @@ run_tests:
     - develop
     - merge_requests
   script:
+    - pip3 install --break-system-packages -e .
+    - pip3 install --break-system-packages pytest pytest-asyncio pytest-timeout
     - pytest -v --asyncio-mode=strict --junitxml=report.xml --timeout=30 tests/
   artifacts:
     reports:
       junit: report.xml
     when: always
     expire_in: 1 day
+
+publish_wheel:
+  stage: build
+  needs: ["build_wheel"]
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^release-.*$/'
+  script:
+    - pip3 install --break-system-packages twine
+    - python3 -m twine upload --repository-url "$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/pypi" dist/*
+  variables:
+    TWINE_USERNAME: "__token__"
+    TWINE_PASSWORD: "$CI_JOB_TOKEN"
