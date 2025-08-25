@@ -22,7 +22,7 @@ before_script:
   - apt-get update && apt-get install -y python3 python3-pip python3-dev gcc
   - python3 -V
   - pip3 install --break-system-packages -U pip
-  - echo "$GLUESYNC_LICENSE_CONTENT" > gs-license.dat
+  
 
 build_wheel:
   stage: build
@@ -44,6 +44,7 @@ run_tests:
     - develop
     - merge_requests
   script:
+    - echo "$GLUESYNC_LICENSE_CONTENT" > gs-license.dat
     - pip3 install --break-system-packages -e .
     - pip3 install --break-system-packages pytest pytest-asyncio pytest-timeout
     - pytest -v --asyncio-mode=strict --junitxml=report.xml --timeout=30 tests/
