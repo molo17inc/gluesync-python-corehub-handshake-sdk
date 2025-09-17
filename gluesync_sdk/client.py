@@ -60,7 +60,7 @@ class GluesyncClient:
         keystore_path: Optional[str] = None,
         keystore_password: Optional[str] = None,
         security_config: Optional[str] = None,
-        ping_interval: float = 1.0,
+        ping_interval: float = 5.0,
         timeout: float = 10.0,
         discovery_start_port: int = 1717,
         discovery_port_range: int = 10,
