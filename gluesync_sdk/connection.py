@@ -190,17 +190,23 @@ class WebSocketConnection:
                         ),
                         timeout=self.timeout
                     )
-            logger.info(f"Connected to {self.connection_url}")
+            logger.info(f"WebSocket connected to {self.connection_url}")
+            logger.info(f"  - Protocol: {'WSS' if self.ssl_context else 'WS'}")
+            logger.info(f"  - Host: {self.host}")
+            logger.info(f"  - Port: {self.port}")
+            logger.info(f"  - SSL enabled: {self.ssl_context is not None}")
             
             # Start the handshake by sending "hello"
             await self.ws.send("hello")
             logger.debug("Sent 'hello' message to CoreHub")
             
             # Wait for the token response
+            logger.debug("Waiting for token response from CoreHub...")
             response = await asyncio.wait_for(
                 self.ws.recv(),
                 timeout=self.timeout
             )
+            logger.debug(f"Received response from CoreHub (length: {len(response) if response else 0} chars)")
             
             # Check if the response is "pong" (should not happen at this stage)
             if response == "pong":
@@ -230,8 +236,19 @@ class WebSocketConnection:
             logger.error(f"Connection closed during handshake: {error_message}")
             raise GluesyncAuthenticationError(error_message)
             
+        except ssl.SSLError as e:
+            logger.error(f"SSL error connecting to {self.connection_url}: {e}")
+            logger.error(f"SSL verify mode: {self.ssl_context.verify_mode if self.ssl_context else 'N/A'}")
+            logger.error(f"SSL check hostname: {self.ssl_context.check_hostname if self.ssl_context else 'N/A'}")
+            if "certificate verify failed" in str(e):
+                logger.error("Certificate verification failed. You may need to set SSL_SKIP_VERIFY=true for self-signed certificates")
+            if self.on_error:
+                await self._call_callback(self.on_error, e)
+            raise GluesyncConnectionError(f"SSL error: {e}")
+            
         except Exception as e:
             logger.error(f"Failed to connect to {self.connection_url}: {e}")
+            logger.error(f"Exception type: {type(e).__name__}")
             if self.on_error:
                 await self._call_callback(self.on_error, e)
             raise GluesyncConnectionError(f"Failed to connect: {e}")
