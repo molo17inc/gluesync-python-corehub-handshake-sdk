@@ -2,9 +2,9 @@
 # -*- coding: utf-8 -*-
 
 """
-This file is part of Gluesync Scheduler Module.
+This file is part of Gluesync.
 
-Gluesync Scheduler Module is dual-licensed under the following licenses:
+Gluesync is dual-licensed under the following licenses:
 
 1. GNU General Public License (GPL) Version 3
    You may use, modify, and distribute this software under the terms of the GPL v3.
