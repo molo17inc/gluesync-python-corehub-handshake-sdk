@@ -40,25 +40,25 @@ def test_direct_loading(certificate_path, password):
     try:
         logger.info("Testing with cryptography library...")
         ssl_context, format_type = create_ssl_context_with_cryptography(certificate_path, password)
-        logger.info(f"✅ SUCCESS: Certificate loaded with cryptography as {format_type}")
+        logger.info(f"SUCCESS: Certificate loaded with cryptography as {format_type}")
     except Exception as e:
-        logger.error(f"❌ FAILED: Could not load with cryptography: {e}")
+        logger.error(f"FAILED: Could not load with cryptography: {e}")
     
     # Test with direct PKCS12 loading
     try:
         logger.info("Testing with direct PKCS12 loading...")
         ssl_context = create_ssl_context_from_pkcs12(certificate_path, password)
-        logger.info("✅ SUCCESS: Certificate loaded with PKCS12 method")
+        logger.info("SUCCESS: Certificate loaded with PKCS12 method")
     except Exception as e:
-        logger.error(f"❌ FAILED: Could not load with PKCS12 method: {e}")
+        logger.error(f"FAILED: Could not load with PKCS12 method: {e}")
     
     # Test with the universal loader
     try:
         logger.info("Testing with universal certificate loader...")
         ssl_context = create_ssl_context_from_jks(certificate_path, password)
-        logger.info("✅ SUCCESS: Certificate loaded with universal loader")
+        logger.info("SUCCESS: Certificate loaded with universal loader")
     except Exception as e:
-        logger.error(f"❌ FAILED: Could not load with universal loader: {e}")
+        logger.error(f"FAILED: Could not load with universal loader: {e}")
 
 
 def test_client_loading(certificate_path, password, config_file=None):
@@ -75,9 +75,9 @@ def test_client_loading(certificate_path, password, config_file=None):
                 ssl=True,
                 security_config=config_file
             )
-            logger.info("✅ SUCCESS: Client created SSL context from security config")
+            logger.info("SUCCESS: Client created SSL context from security config")
         except Exception as e:
-            logger.error(f"❌ FAILED: Client could not create SSL context from security config: {e}")
+            logger.error(f"FAILED: Client could not create SSL context from security config: {e}")
     else:
         # Test with direct parameters
         try:
@@ -89,9 +89,9 @@ def test_client_loading(certificate_path, password, config_file=None):
                 keystore_path=certificate_path,
                 keystore_password=password
             )
-            logger.info("✅ SUCCESS: Client created SSL context from direct parameters")
+            logger.info("SUCCESS: Client created SSL context from direct parameters")
         except Exception as e:
-            logger.error(f"❌ FAILED: Client could not create SSL context from direct parameters: {e}")
+            logger.error(f"FAILED: Client could not create SSL context from direct parameters: {e}")
 
 
 def test_case_sensitivity(certificate_path, password):
@@ -102,9 +102,9 @@ def test_case_sensitivity(certificate_path, password):
     logger.info(f"Testing with original password: {password}")
     try:
         ssl_context, format_type = create_ssl_context_with_cryptography(certificate_path, password)
-        logger.info(f"✅ SUCCESS: Certificate loaded with original password: {password}")
+        logger.info(f"SUCCESS: Certificate loaded with original password: {password}")
     except Exception as e:
-        logger.error(f"❌ FAILED: Could not load with original password: {e}")
+        logger.error(f"FAILED: Could not load with original password: {e}")
     
     # Test lowercase password if original has uppercase
     if any(c.isupper() for c in password):
@@ -112,9 +112,9 @@ def test_case_sensitivity(certificate_path, password):
         logger.info(f"Testing with lowercase password: {lowercase_password}")
         try:
             ssl_context, format_type = create_ssl_context_with_cryptography(certificate_path, lowercase_password)
-            logger.info(f"✅ SUCCESS: Certificate loaded with lowercase password: {lowercase_password}")
+            logger.info(f"SUCCESS: Certificate loaded with lowercase password: {lowercase_password}")
         except Exception as e:
-            logger.error(f"❌ FAILED: Could not load with lowercase password: {e}")
+            logger.error(f"FAILED: Could not load with lowercase password: {e}")
     
     # Test uppercase password if original has lowercase
     if any(c.islower() for c in password):
@@ -122,9 +122,9 @@ def test_case_sensitivity(certificate_path, password):
         logger.info(f"Testing with uppercase password: {uppercase_password}")
         try:
             ssl_context, format_type = create_ssl_context_with_cryptography(certificate_path, uppercase_password)
-            logger.info(f"✅ SUCCESS: Certificate loaded with uppercase password: {uppercase_password}")
+            logger.info(f"SUCCESS: Certificate loaded with uppercase password: {uppercase_password}")
         except Exception as e:
-            logger.error(f"❌ FAILED: Could not load with uppercase password: {e}")
+            logger.error(f"FAILED: Could not load with uppercase password: {e}")
 
 
 def create_test_config(certificate_path, password, output_file):
