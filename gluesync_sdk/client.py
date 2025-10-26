@@ -162,6 +162,11 @@ class GluesyncClient:
                             alias=ssl_config.get('certificateAlias'),
                             key_password=ssl_config.get('certificateKeyPassword')
                         )
+                        
+                        # Apply the verify_ssl setting to the SSL context
+                        self.ssl_context.check_hostname = self.verify_ssl
+                        self.ssl_context.verify_mode = ssl.CERT_REQUIRED if self.verify_ssl else ssl.CERT_NONE
+                        
                         logger.info("SSL context created successfully from security config")
                     except Exception as e:
                         logger.error(f"Failed to create SSL context from {jks_path}: {str(e)}")
@@ -177,6 +182,11 @@ class GluesyncClient:
                         
                     try:
                         self.ssl_context = create_ssl_context_from_jks(keystore_path, keystore_password)
+                        
+                        # Apply the verify_ssl setting to the SSL context
+                        self.ssl_context.check_hostname = self.verify_ssl
+                        self.ssl_context.verify_mode = ssl.CERT_REQUIRED if self.verify_ssl else ssl.CERT_NONE
+                        
                         logger.info("SSL context created successfully")
                     except Exception as e:
                         logger.error(f"Failed to create SSL context from {keystore_path}: {str(e)}")
