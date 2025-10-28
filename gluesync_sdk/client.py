@@ -101,7 +101,6 @@ class GluesyncClient:
         
         # Store license file path
         self.license_file_path = license_file_path
-        self._license_content = None
             
         # SSL context setup
         self.ssl_context = None
@@ -273,17 +272,14 @@ class GluesyncClient:
         Raises:
             GluesyncLicenseError: If the license file cannot be read
         """
-        if self._license_content is None:
-            if not os.path.exists(self.license_file_path):
-                raise GluesyncLicenseError(f"License file not found: {self.license_file_path}")
-                
-            try:
-                with open(self.license_file_path, 'r') as file:
-                    self._license_content = file.read().strip()
-            except Exception as e:
-                raise GluesyncLicenseError(f"Failed to read license file: {e}")
-                
-        return self._license_content
+        if not os.path.exists(self.license_file_path):
+            raise GluesyncLicenseError(f"License file not found: {self.license_file_path}")
+            
+        try:
+            with open(self.license_file_path, 'r') as file:
+                return file.read().strip()
+        except Exception as e:
+            raise GluesyncLicenseError(f"Failed to read license file: {e}")
     
     async def connect(self) -> str:
         """
