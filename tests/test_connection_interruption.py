@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-Test script for connection interruption in the GlueSync SDK.
+Test script for connection interruption in the Gluesync SDK.
 This script tests how the client behaves when the CoreHub becomes unavailable
 or closes the connection.
 """
