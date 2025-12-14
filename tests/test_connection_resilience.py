@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-Test script for connection resilience in the GlueSync SDK.
+Test script for connection resilience in the Gluesync SDK.
 This script tests how the client behaves when the CoreHub becomes unavailable
 and demonstrates how to implement a reconnection strategy.
 """

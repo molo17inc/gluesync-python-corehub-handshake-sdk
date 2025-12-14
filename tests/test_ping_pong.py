@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-Test script for the ping-pong mechanism in the GlueSync SDK.
+Test script for the ping-pong mechanism in the Gluesync SDK.
 This script connects to a CoreHub and logs all ping-pong messages.
 """
 
