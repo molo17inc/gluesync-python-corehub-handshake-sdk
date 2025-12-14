@@ -421,8 +421,15 @@ class GluesyncClient:
             
     async def _reconnect(self):
         """
-        Reconnection logic. First tries to reconnect to the specified/known host.
-        If that fails, attempts to re-discover the CoreHub in case its IP address has changed.
+        Reconnection logic with retry and exponential backoff.
+
+        Behaviour:
+        - If a specific host is known (explicit or previously discovered), first try
+          to reconnect directly to that host.
+        - If direct reconnection fails, fall back to UDP discovery to find CoreHub
+          again in case its IP changed.
+        - Repeat this process indefinitely with exponential backoff until
+          reconnection succeeds or the application is shut down.
         """
         if self._reconnecting:
             return
@@ -434,47 +441,61 @@ class GluesyncClient:
         if self.on_reconnecting:
             await self._call_callback(self.on_reconnecting)
         
+        retry_count = 0
+        backoff_delay = 1.0
+        max_backoff = 30.0
+
         try:
-            # If a specific host is provided, try to reconnect directly first
-            if self.host:
-                logger.info(f"CoreHub address known ({self.host}), attempting direct reconnection...")
+            while True:
                 try:
+                    # If a specific host is provided, try to reconnect directly first
+                    if self.host:
+                        if retry_count == 0:
+                            logger.info(f"CoreHub address known ({self.host}), attempting direct reconnection...")
+                        else:
+                            logger.info(f"Reconnection attempt {retry_count} to known CoreHub address ({self.host})...")
+
+                        await self._attempt_reconnect()
+                        # Successfully reconnected
+                        return
+
+                    # Either no host was provided initially or host was cleared,
+                    # so attempt discovery
+                    logger.info("No CoreHub host set, attempting UDP discovery for reconnection...")
+
+                    previous_host = self.host
+                    self.host = None
+
+                    discovery = CoreHubDiscovery(
+                        start_port=self.discovery_start_port,
+                        port_range=self.discovery_port_range
+                    )
+                    corehub_address = await discovery.discover_corehub(
+                        ssl_context=self.ssl_context,
+                        verify_ssl=self.verify_ssl
+                    )
+
+                    # If discovered a new host different from previous one, log it
+                    if previous_host and previous_host != corehub_address:
+                        logger.info(f"CoreHub IP changed from {previous_host} to {corehub_address}")
+
+                    # Save the discovered host
+                    self.host = corehub_address
+                    logger.info(f"CoreHub discovered at {corehub_address}, attempting reconnection...")
+
+                    # Now attempt to reconnect with the discovered address
                     await self._attempt_reconnect()
-                    return  # Successfully reconnected, exit early
+                    # Successfully reconnected
+                    return
+
                 except Exception as reconnect_error:
-                    logger.warning(f"Direct reconnection to {self.host} failed: {reconnect_error}")
-                    logger.info("CoreHub may have changed IP address, attempting re-discovery...")
-                    
-            # Either no host was provided initially or direct reconnection failed,
-            # so attempt discovery
-            try:
-                # Clear the previous host so we truly re-discover
-                previous_host = self.host
-                self.host = None
-                
-                discovery = CoreHubDiscovery(start_port=self.discovery_start_port, port_range=self.discovery_port_range)
-                corehub_address = await discovery.discover_corehub(ssl_context=self.ssl_context, verify_ssl=self.verify_ssl)
-                
-                # If discovered a new host different from previous one, log it
-                if previous_host and previous_host != corehub_address:
-                    logger.info(f"CoreHub IP changed from {previous_host} to {corehub_address}")
-                    
-                # Save the discovered host
-                self.host = corehub_address
-                logger.info(f"CoreHub discovered at {corehub_address}, attempting reconnection...")
-                
-                # Now attempt to reconnect with the discovered address
-                await self._attempt_reconnect()
-            except Exception as discovery_error:
-                logger.error(f"Failed to discover CoreHub: {discovery_error}")
-                # Restore the previous host in case we want to retry later
-                if previous_host:
-                    self.host = previous_host
-                # Set reconnecting to false to allow future reconnection attempts
-                self._reconnecting = False
-        except Exception as e:
-            logger.error(f"Error during reconnection: {e}")
-            # Set reconnecting to false to allow future reconnection attempts
+                    retry_count += 1
+                    logger.warning(f"Reconnection attempt {retry_count} failed: {reconnect_error}")
+                    logger.info(f"Waiting {backoff_delay} seconds before next reconnection attempt...")
+                    await asyncio.sleep(backoff_delay)
+                    backoff_delay = min(backoff_delay * 2, max_backoff)
+        finally:
+            # Allow future reconnection attempts if needed
             self._reconnecting = False
             
     async def _attempt_reconnect(self):
