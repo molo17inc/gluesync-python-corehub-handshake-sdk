@@ -442,7 +442,7 @@ class GluesyncClient:
             await self._call_callback(self.on_reconnecting)
         retry_count = 0
         backoff_delay = 1.0
-        max_backoff = 30.0
+        max_backoff = 15.0
 
         try:
             while True:
