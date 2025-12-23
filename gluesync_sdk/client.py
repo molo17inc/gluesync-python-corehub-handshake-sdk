@@ -437,19 +437,12 @@ class GluesyncClient:
             return
         self._reconnecting = True
         logger.info("Starting reconnection process...")
-        
-        # WINDOWS CONTAINER FIX: Wait for DNS to propagate in NAT network
-        # Windows NAT has known delays in updating DNS after container restarts
-        logger.info("[Windows DNS Fix] Waiting 5 seconds for NAT DNS propagation...")
-        await asyncio.sleep(5.0)
-        
         # Notify listeners that we're trying to reconnect
         if self.on_reconnecting:
             await self._call_callback(self.on_reconnecting)
         retry_count = 0
-        backoff_delay = 2.0
-        max_backoff = 30.0
-
+        backoff_delay = 1.0
+        max_backoff = 15.0
 
         try:
             while True:
@@ -536,46 +529,11 @@ class GluesyncClient:
     async def _attempt_reconnect(self):
         """
         Attempt to reconnect to the CoreHub.
-        
-        WINDOWS CONTAINER FIX: Forces fresh DNS resolution to bypass Windows NAT DNS cache.
-        This is critical for Windows containers where DNS cache isn't updated when 
-        dependent containers restart with new IPs.
         """
         try:
-            import socket
-            
-            # WINDOWS CONTAINER FIX: Force fresh DNS lookup to bypass NAT DNS cache
-            host_to_connect = self.host
-            if self.host:
-                try:
-                    # Clear any cached socket info and force fresh DNS resolution
-                    logger.info(f"[Windows DNS Fix] Resolving {self.host} to IP address...")
-                    
-                    # socket.getaddrinfo forces a fresh DNS query
-                    addr_info = socket.getaddrinfo(
-                        self.host, 
-                        self.port,
-                        family=socket.AF_UNSPEC,
-                        type=socket.SOCK_STREAM
-                    )
-                    
-                    # Get the IP address from the first result
-                    ip_address = addr_info[0][4][0]
-                    logger.info(f"[Windows DNS Fix] Resolved {self.host} to {ip_address}")
-                    
-                    # Use IP directly instead of hostname to bypass DNS cache
-                    host_to_connect = ip_address
-                    
-                except socket.gaierror as dns_error:
-                    logger.warning(
-                        f"[Windows DNS Fix] DNS resolution failed for {self.host}: {dns_error}. "
-                        f"Will retry with hostname."
-                    )
-                    # Fall back to hostname if resolution fails
-            
-            # Create a new connection with resolved IP
+            # Create a new connection
             self._connection = WebSocketConnection(
-                host=host_to_connect,
+                host=self.host,
                 port=self.port,
                 headers=self.get_connection_headers(),
                 ssl_context=self.ssl_context,
