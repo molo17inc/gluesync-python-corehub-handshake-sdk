@@ -64,8 +64,7 @@ class GluesyncClient:
         timeout: float = 10.0,
         discovery_start_port: int = 1717,
         discovery_port_range: int = 10,
-        verify_ssl: bool = True,
-        rediscovery_threshold: int = 5
+        verify_ssl: bool = True
     ):
         """
         Initialize the Gluesync client.
@@ -99,9 +98,6 @@ class GluesyncClient:
         self.discovery_port_range = discovery_port_range
         self.security_config = security_config
         self.verify_ssl = verify_ssl
-        self.rediscovery_threshold = max(0, rediscovery_threshold or 0)
-        self._consecutive_failures = 0
-        self._force_discovery = False
         
         # Store license file path
         self.license_file_path = license_file_path
@@ -427,14 +423,15 @@ class GluesyncClient:
         """
         Reconnection logic with retry and exponential backoff.
 
-        Behaviour:
+        Behaviour (ported from the Node.js SDK):
         - If a specific host is known (explicit or previously discovered), first try
           to reconnect directly to that host.
-        - If direct reconnection repeatedly fails, optionally reset the cached
-          host and fall back to UDP discovery after a configurable number of
-          consecutive failures (rediscovery_threshold).
+        - If direct reconnection fails, immediately fall back to UDP discovery
+          on the same attempt (the CoreHub may have changed IP).
         - Repeat this process indefinitely with exponential backoff until
           reconnection succeeds or the application is shut down.
+        - When the backoff delay reaches the maximum, reset it to 1 second
+          and increment a cycle counter (infinite retry with periodic reset).
         """
         if self._reconnecting:
             return
@@ -448,11 +445,13 @@ class GluesyncClient:
 
         retry_count = 0
         backoff_delay = 1.0
-        max_backoff = 15.0
+        max_backoff = 30.0
+        cycle_count = 0
 
         try:
             while True:
                 try:
+                    # Phase 1: Try direct reconnection to the known host
                     if self.host:
                         if retry_count == 0:
                             logger.info(
@@ -460,27 +459,25 @@ class GluesyncClient:
                             )
                         else:
                             logger.info(
-                                f"Reconnection attempt {retry_count} to known CoreHub address ({self.host})..."
+                                f"Reconnection attempt {retry_count} (cycle {cycle_count}) to known CoreHub address ({self.host})..."
                             )
 
-                        await self._attempt_reconnect()
-                        return  # Successfully reconnected
+                        try:
+                            await self._attempt_reconnect()
+                            return  # Successfully reconnected
+                        except Exception as direct_error:
+                            logger.warning(
+                                f"Direct reconnection to {self.host} failed: {direct_error}"
+                            )
+                            logger.info(
+                                "CoreHub may have changed IP address, attempting re-discovery..."
+                            )
 
-                    # At this point self.host is falsy.
-                    # Only use discovery if we never had a successful connection before
-                    # (no token yet). If a token exists, the endpoint should be frozen
-                    # and we should NOT re-discover unless forced.
-                    if self._token is not None and not self._force_discovery:
-                        logger.warning(
-                            "Host is unset but a token exists; skipping UDP discovery because endpoint should already be known."
-                        )
-                        raise GluesyncConnectionError(
-                            "Host unset after successful connection; cannot rediscover in frozen-endpoint mode"
-                        )
-
-                    logger.info("No CoreHub host set, attempting UDP discovery for reconnection...")
-
+                    # Phase 2: Fall back to UDP discovery
                     previous_host = self.host
+                    self.host = None
+
+                    logger.info("Using UDP autodiscovery to find CoreHub...")
                     discovery = CoreHubDiscovery(
                         start_port=self.discovery_start_port,
                         port_range=self.discovery_port_range,
@@ -505,29 +502,28 @@ class GluesyncClient:
 
                 except Exception as reconnect_error:
                     retry_count += 1
-                    if self.rediscovery_threshold:
-                        self._consecutive_failures += 1
                     logger.warning(
-                        f"Reconnection attempt {retry_count} failed: {reconnect_error}"
+                        f"Reconnection attempt {retry_count} (cycle {cycle_count}) failed: {reconnect_error}"
                     )
+
+                    # Restore previous host if discovery failed so we can
+                    # retry direct connection on the next iteration
+                    if not self.host and previous_host:
+                        self.host = previous_host
+
                     logger.info(
                         f"Waiting {backoff_delay} seconds before next reconnection attempt..."
                     )
                     await asyncio.sleep(backoff_delay)
                     backoff_delay = min(backoff_delay * 2, max_backoff)
 
-                    if (
-                        self.host
-                        and self.rediscovery_threshold
-                        and self._consecutive_failures >= self.rediscovery_threshold
-                    ):
-                        logger.warning(
-                            "Exceeded rediscovery threshold (%s failures). Resetting cached CoreHub host and re-enabling UDP discovery.",
-                            self.rediscovery_threshold,
+                    # Reset backoff when we hit the ceiling (like Node.js SDK)
+                    if backoff_delay >= max_backoff:
+                        backoff_delay = 1.0
+                        cycle_count += 1
+                        logger.info(
+                            f"Completed backoff cycle {cycle_count}, resetting delay to 1 second"
                         )
-                        self.host = None
-                        self._force_discovery = True
-                        self._consecutive_failures = 0
         finally:
             self._reconnecting = False
             
@@ -571,5 +567,4 @@ class GluesyncClient:
             return token
         except Exception as e:
             logger.error(f"Reconnection attempt failed: {e}")
-            self._reconnecting = False
             raise
