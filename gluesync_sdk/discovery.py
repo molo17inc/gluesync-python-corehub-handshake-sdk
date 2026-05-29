@@ -38,6 +38,28 @@ DEFAULT_START_PORT = 1717
 DEFAULT_PORT_RANGE = 10  # Will scan ports from START_PORT+1 to START_PORT+DEFAULT_PORT_RANGE
 
 
+class DiscoveryProtocol(asyncio.DatagramProtocol):
+    """
+    Native asyncio datagram protocol for non-blocking UDP discovery.
+    """
+    def __init__(self, target_message: bytes, future: asyncio.Future):
+        self.target_message = target_message
+        self.future = future
+        self.transport = None
+
+    def connection_made(self, transport):
+        self.transport = transport
+
+    def datagram_received(self, data, addr):
+        if data == self.target_message:
+            if not self.future.done():
+                self.future.set_result(addr[0])
+
+    def error_received(self, exc):
+        if not self.future.done():
+            self.future.set_exception(exc)
+
+
 class CoreHubDiscovery:
     """
     Provides UDP autodiscovery for CoreHub servers on the local network.
@@ -55,13 +77,14 @@ class CoreHubDiscovery:
         self.port_range = port_range
         self.port_list = list(range(start_port + 1, start_port + port_range + 1))
     
-    async def discover_corehub(self, ssl_context=None, verify_ssl: bool = True) -> str:
+    async def discover_corehub(self, ssl_context=None, verify_ssl: bool = True, timeout: float = 15.0) -> str:
         """
         Listen for the CoreHub broadcast message and return the CoreHub IP address.
         
         Args:
             ssl_context: SSL context to use for secure connections
             verify_ssl: Whether to verify SSL certificates (default: True)
+            timeout: Timeout in seconds to wait for discovery (default: 15.0)
         
         Returns:
             The IP address of the CoreHub as a string
@@ -73,62 +96,33 @@ class CoreHubDiscovery:
         # Choose a random port from the range to listen on
         port = random.choice(self.port_list)
         
-        # Create a UDP socket
-        sock = None
+        loop = asyncio.get_running_loop()
+        future = loop.create_future()
         
         try:
-            # Create and configure the socket
-            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            # Create the datagram endpoint
+            transport, protocol = await loop.create_datagram_endpoint(
+                lambda: DiscoveryProtocol(DISCOVERY_MESSAGE, future),
+                local_addr=("0.0.0.0", port)
+            )
+            logger.debug(f"Listening for CoreHub broadcast on UDP port {port}")
+        except OSError as e:
+            # Port might be in use, try with another port
+            logger.debug(f"Port {port} already in use: {e}. Trying another port...")
+            # Small delay before recursively trying again
+            await asyncio.sleep(1)
+            return await self.discover_corehub(ssl_context, verify_ssl, timeout)
             
-            # Set socket timeout to prevent blocking forever
-            sock.settimeout(5)
-            
-            # Try to bind to the chosen port
-            try:
-                sock.bind(("0.0.0.0", port))
-                logger.debug(f"Listening for CoreHub broadcast on port {port}")
-            except OSError as e:
-                # Port might be in use, try with another port
-                logger.debug(f"Port {port} already in use, trying another port...")
-                sock.close()
-                # Small delay before recursively trying again
-                await asyncio.sleep(1)
-                return await self.discover_corehub()
-            
-            # Wait for a broadcast message in a non-blocking way
-            while True:
-                try:
-                    # This is a blocking call but has a timeout set
-                    data, addr = sock.recvfrom(1024)
-                    
-                    logger.debug(f"Received data from {addr[0]}: {data}")
-                    
-                    # Check if this is the expected discovery message
-                    if data == DISCOVERY_MESSAGE:
-                        corehub_address = addr[0]
-                        logger.info(f"CoreHub discovered at {corehub_address}")
-                        return corehub_address
-                    
-                except socket.timeout:
-                    # Continue listening after timeout
-                    logger.debug("No broadcast received, continuing to listen...")
-                    # We can use a sleep to prevent CPU spinning
-                    await asyncio.sleep(0.1)
-                    continue
-                    
-                except Exception as e:
-                    logger.error(f"Error while listening for broadcast: {e}")
-                    raise ConnectionError(f"Error while listening for broadcast: {e}")
-                    
-        except Exception as e:
-            logger.error(f"Failed to discover CoreHub: {e}")
-            raise ConnectionError(f"Failed to discover CoreHub: {e}")
-            
+        try:
+            # Wait for the future with a timeout
+            corehub_address = await asyncio.wait_for(future, timeout=timeout)
+            logger.info(f"CoreHub discovered at {corehub_address}")
+            return corehub_address
+        except asyncio.TimeoutError:
+            logger.warning(f"Discovery timed out after {timeout} seconds")
+            raise TimeoutError(f"Discovery timed out after {timeout} seconds")
         finally:
-            # Clean up the socket
-            if sock:
-                sock.close()
+            transport.close()
 
 
 async def get_corehub_address(env_var_name: str = "CORE_HUB_ADDRESS", 

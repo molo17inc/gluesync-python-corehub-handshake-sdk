@@ -316,8 +316,12 @@ class WebSocketConnection:
             logger.debug("Ping task cancelled")
         except Exception as e:
             logger.error(f"Error in ping loop: {e}")
+            was_connected = self._connected
+            self._connected = False
             if self.on_error:
                 await self._call_callback(self.on_error, e)
+            if was_connected and self.on_disconnected:
+                await self._call_callback(self.on_disconnected, f"Ping error: {e}")
     
     async def _receive_loop(self):
         """
@@ -336,6 +340,7 @@ class WebSocketConnection:
         except asyncio.CancelledError:
             logger.debug("Receive task cancelled")
         except websockets_connection_closed_exceptions as e:
+            was_connected = self._connected
             self._connected = False
             # Handle different exception formats
             try:
@@ -344,12 +349,16 @@ class WebSocketConnection:
                 error_message = str(e)
             logger.error(f"Connection closed: {error_message}")
             
-            if self.on_disconnected:
+            if was_connected and self.on_disconnected:
                 await self._call_callback(self.on_disconnected, error_message)
         except Exception as e:
             logger.error(f"Error in receive loop: {e}")
+            was_connected = self._connected
+            self._connected = False
             if self.on_error:
                 await self._call_callback(self.on_error, e)
+            if was_connected and self.on_disconnected:
+                await self._call_callback(self.on_disconnected, f"Connection error: {e}")
     
     async def _call_callback(self, callback: Callable, *args, **kwargs):
         """
