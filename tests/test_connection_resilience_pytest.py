@@ -19,9 +19,11 @@ async def test_receive_loop_general_exception_triggers_disconnect():
     # Mock ws to raise an OSError when recv is called
     mock_ws = AsyncMock()
     mock_ws.recv.side_effect = OSError("Connection reset by peer")
-    # Set attributes checked by is_connected property
-    mock_ws.closed = False
-    mock_ws.is_closing = MagicMock(return_value=False)
+    # is_connected inspects the connection's .state enum (websockets >= 14),
+    # whose OPEN member indicates an open socket.
+    open_state = MagicMock()
+    open_state.name = "OPEN"
+    mock_ws.state = open_state
     conn.ws = mock_ws
     
     # Track on_disconnected call
@@ -57,9 +59,11 @@ async def test_ping_loop_general_exception_triggers_disconnect():
     # Mock ws to raise an OSError when send is called
     mock_ws = AsyncMock()
     mock_ws.send.side_effect = OSError("Socket broken")
-    # Set attributes checked by is_connected property
-    mock_ws.closed = False
-    mock_ws.is_closing = MagicMock(return_value=False)
+    # is_connected inspects the connection's .state enum (websockets >= 14),
+    # whose OPEN member indicates an open socket.
+    open_state = MagicMock()
+    open_state.name = "OPEN"
+    mock_ws.state = open_state
     conn.ws = mock_ws
     
     # Track on_disconnected call
