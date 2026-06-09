@@ -73,7 +73,8 @@ class WebSocketConnection:
         ssl_context: Optional[ssl.SSLContext] = None,
         ping_interval: float = 1.0,
         timeout: float = 10.0,
-        verify_ssl: bool = True
+        verify_ssl: bool = True,
+        pong_timeout: Optional[float] = None
     ):
         """
         Initialize the WebSocket connection.
@@ -86,6 +87,11 @@ class WebSocketConnection:
             ping_interval: Interval in seconds between ping messages
             timeout: Connection timeout in seconds
             verify_ssl: Whether to verify SSL certificates (default: True)
+            pong_timeout: Maximum time in seconds to wait for a pong (or any
+                message) from the CoreHub before considering the connection dead.
+                Defaults to max(ping_interval * 3, 15.0). This liveness watchdog
+                is what detects half-open TCP connections (e.g. on Windows when
+                the peer disappears without sending a TCP FIN/RST).
         """
         self.host = host
         self.port = port
@@ -94,6 +100,10 @@ class WebSocketConnection:
         self.ping_interval = ping_interval
         self.timeout = timeout
         self.verify_ssl = verify_ssl
+        self.pong_timeout = (
+            pong_timeout if pong_timeout is not None
+            else max(ping_interval * 3, 15.0)
+        )
         
         # If SSL context is provided but verify_ssl is False, modify the context
         if self.ssl_context and not self.verify_ssl:
@@ -105,6 +115,9 @@ class WebSocketConnection:
         self._ping_task = None
         self._receive_task = None
         self._connected = False
+        # Monotonic timestamp of the last message received from the CoreHub.
+        # Used by the ping loop's liveness watchdog.
+        self._last_pong_time = None
         
         # Event handlers
         self.on_connected: Optional[Callable[[str], Any]] = None
@@ -170,11 +183,16 @@ class WebSocketConnection:
             # Connect to the WebSocket server
             try:
                 # Try with additional_headers (websockets >= 11.0)
+                # ping_interval=None disables the library's protocol-level Ping
+                # keepalive: the CoreHub handshake uses application-level text
+                # "ping"/"pong" messages, and our own ping loop + pong watchdog
+                # (see _ping_loop) is the single, deterministic liveness source.
                 self.ws = await asyncio.wait_for(
                     websockets.connect(
                         self.connection_url,
                         additional_headers=self.headers,
-                        ssl=self.ssl_context
+                        ssl=self.ssl_context,
+                        ping_interval=None
                     ),
                     timeout=self.timeout
                 )
@@ -185,7 +203,8 @@ class WebSocketConnection:
                         websockets.connect(
                             self.connection_url,
                             extra_headers=self.headers,
-                            ssl=self.ssl_context
+                            ssl=self.ssl_context,
+                            ping_interval=None
                         ),
                         timeout=self.timeout
                     )
@@ -195,7 +214,8 @@ class WebSocketConnection:
                     self.ws = await asyncio.wait_for(
                         websockets.connect(
                             self.connection_url,
-                            ssl=self.ssl_context
+                            ssl=self.ssl_context,
+                            ping_interval=None
                         ),
                         timeout=self.timeout
                     )
@@ -224,6 +244,9 @@ class WebSocketConnection:
             # Store the token
             self.token = response
             self._connected = True
+            # Seed the liveness watchdog: a successful handshake counts as a
+            # fresh sign of life from the CoreHub.
+            self._last_pong_time = asyncio.get_event_loop().time()
             logger.info("Authentication successful, received token")
             
             # Start the ping and receive tasks
@@ -313,14 +336,37 @@ class WebSocketConnection:
     
     async def _ping_loop(self):
         """
-        Send ping messages at regular intervals to keep the connection alive.
+        Send ping messages at regular intervals to keep the connection alive,
+        and run a liveness watchdog over the responses.
+
+        The watchdog is what makes half-open connections detectable: on a dead
+        peer that never sent a TCP FIN/RST (common on Windows when the CoreHub
+        host disappears), ``send`` can succeed into the kernel buffer without
+        raising for a long time and ``recv`` simply blocks forever. By requiring
+        a ``pong`` (or any message) within ``pong_timeout`` we deterministically
+        declare the connection dead and trigger reconnection.
         """
         try:
+            # A fresh handshake already seeded _last_pong_time; guard anyway.
+            if self._last_pong_time is None:
+                self._last_pong_time = asyncio.get_event_loop().time()
+
             while self.is_connected:
                 await asyncio.sleep(self.ping_interval)
-                if self.is_connected:
-                    await self.ws.send("ping")
-                    logger.debug("Sent 'ping' to CoreHub")
+                if not self.is_connected:
+                    break
+
+                # Liveness watchdog: have we heard from the CoreHub recently?
+                elapsed = asyncio.get_event_loop().time() - self._last_pong_time
+                if elapsed > self.pong_timeout:
+                    raise GluesyncConnectionError(
+                        f"No pong received from CoreHub within {self.pong_timeout:.0f}s "
+                        f"(last activity {elapsed:.0f}s ago); connection considered dead"
+                    )
+
+                # Bound the send so a half-open socket cannot block forever.
+                await asyncio.wait_for(self.ws.send("ping"), timeout=self.timeout)
+                logger.debug("Sent 'ping' to CoreHub")
         except asyncio.CancelledError:
             logger.debug("Ping task cancelled")
         except Exception as e:
@@ -340,7 +386,11 @@ class WebSocketConnection:
             while self.is_connected:
                 message = await self.ws.recv()
                 logger.debug(f"Received message from CoreHub: {message}")
-                
+
+                # Any inbound message proves the peer is alive: feed the
+                # liveness watchdog in _ping_loop.
+                self._last_pong_time = asyncio.get_event_loop().time()
+
                 # Handle pong messages
                 if message == "pong":
                     logger.debug("Received 'pong' from CoreHub")
