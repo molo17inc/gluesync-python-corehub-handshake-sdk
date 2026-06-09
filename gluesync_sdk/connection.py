@@ -119,20 +119,29 @@ class WebSocketConnection:
         Returns:
             True if connected, False otherwise
         """
-        # Different versions of websockets library use different attributes
-        # to check if the connection is closed
-        if self._connected and self.ws is not None:
-            try:
-                # Try the closed attribute first (older versions)
-                return not self.ws.closed
-            except AttributeError:
-                # For newer versions, check if the connection is open
-                try:
-                    return not self.ws.is_closing()
-                except AttributeError:
-                    # As a fallback, assume it's still connected if we have a ws object
-                    return True
-        return False
+        # Different versions of the websockets library expose the connection
+        # state differently. We must detect a dead socket accurately, otherwise
+        # the ping/receive loops never terminate and connection-state checks
+        # (used by reconnection bookkeeping) wrongly report "connected" forever.
+        if not (self._connected and self.ws is not None):
+            return False
+
+        # websockets >= 14 (the new asyncio API used by 15.x, which this SDK
+        # pins) and the legacy protocol both expose a `.state` enum whose OPEN
+        # member indicates an open connection.
+        state = getattr(self.ws, "state", None)
+        if state is not None:
+            state_name = getattr(state, "name", None)
+            if state_name is not None:
+                return state_name == "OPEN"
+
+        # Legacy websockets (< 11) exposed a boolean `.closed` attribute.
+        closed = getattr(self.ws, "closed", None)
+        if isinstance(closed, bool):
+            return not closed
+
+        # As a last resort, fall back to our internally tracked flag.
+        return self._connected
     
     @property
     def connection_url(self) -> str:

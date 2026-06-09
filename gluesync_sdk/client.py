@@ -89,6 +89,11 @@ class GluesyncClient:
             GluesyncSSLError: If SSL configuration is invalid
         """
         self.host = host
+        # Track whether the host was explicitly provided. When it is (e.g. a
+        # hardcoded CoreHub DNS name on platforms where UDP autodiscovery is
+        # unavailable, such as Windows), reconnection must keep targeting that
+        # host directly and must never clear it to fall back to discovery.
+        self._host_explicitly_set = host is not None
         self.port = port
         self.module_tag = module_tag
         self.use_ssl = use_ssl
@@ -450,6 +455,9 @@ class GluesyncClient:
 
         try:
             while True:
+                # Defined here so the except handler below can always reference
+                # it safely, even when Phase 2 (discovery) is skipped.
+                previous_host = None
                 try:
                     # Phase 1: Try direct reconnection to the known host
                     if self.host:
@@ -469,6 +477,16 @@ class GluesyncClient:
                             logger.warning(
                                 f"Direct reconnection to {self.host} failed: {direct_error}"
                             )
+                            if self._host_explicitly_set:
+                                # The host was provided explicitly (e.g. a
+                                # hardcoded CoreHub DNS name on a platform without
+                                # UDP discovery such as Windows). Never clear it
+                                # nor fall back to discovery - just keep retrying
+                                # the same host with exponential backoff.
+                                logger.info(
+                                    "Host was explicitly configured; will keep retrying it directly (skipping UDP discovery)."
+                                )
+                                raise
                             logger.info(
                                 "CoreHub may have changed IP address, attempting re-discovery..."
                             )
