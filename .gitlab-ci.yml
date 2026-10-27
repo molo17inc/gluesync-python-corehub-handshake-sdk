@@ -1,4 +1,4 @@
-image: gradle:8.8-jdk21
+image: nexus.hq.molo17.com/molo17-local/gradle:8.8-jdk21
 
 default:
   tags:
