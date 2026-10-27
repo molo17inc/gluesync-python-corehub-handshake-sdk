@@ -27,7 +27,14 @@ MOLO17 for more information.
 Copyright (C) 2025 MOLO17. All rights reserved.
 """
 
-__version__ = "0.1.0"
+from importlib.metadata import PackageNotFoundError, version as _package_version
+
+# The release version comes from the tag (CI writes it into setup.py at build
+# time), so read it from the installed package instead of hardcoding it here.
+try:
+    __version__ = _package_version("gluesync-sdk")
+except PackageNotFoundError:  # running from a source checkout, not installed
+    __version__ = "0.0.0.dev0"
 __author__ = "MOLO17"
 __email__ = "info@molo17.com"
 
