@@ -10,6 +10,7 @@ stages:
 
 variables:
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.pip-cache"
+  PIP_INDEX_URL: "https://nexus.hq.molo17.com/repository/pypi-all/simple"
   CI: "true"
   PYTHONUNBUFFERED: "1"
 
@@ -83,3 +84,16 @@ publish_wheel:
   variables:
     TWINE_USERNAME: "gitlab-ci-token"
     TWINE_PASSWORD: "$CI_JOB_TOKEN"
+
+# Publish the same release to the HQ Nexus hosted PyPI repo (pypi-molo17),
+# so consumers can install gluesync-sdk from the Nexus group index without a GitLab token.
+# NEXUS_PYPI_USER / NEXUS_PYPI_PASSWORD: masked CI variables (Nexus user ci-pypi-deploy).
+publish_wheel_nexus:
+  stage: build
+  needs: ["build_wheel"]
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^release-.*$/'
+  script:
+    - test -n "$NEXUS_PYPI_USER" && test -n "$NEXUS_PYPI_PASSWORD" || { echo "NEXUS_PYPI_USER/NEXUS_PYPI_PASSWORD not set"; exit 1; }
+    - pip3 install --break-system-packages twine
+    - python3 -m twine upload --repository-url "https://nexus.hq.molo17.com/repository/pypi-molo17/" -u "$NEXUS_PYPI_USER" -p "$NEXUS_PYPI_PASSWORD" dist/*
